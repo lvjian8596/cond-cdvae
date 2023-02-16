@@ -22,7 +22,9 @@ class CrystDataset(Dataset):
     def __init__(
         self,
         name: ValueNode,
-        path: ValueNode,
+        path: ValueNode,  # original crystal info
+        save_path: ValueNode,  # processed graph data
+        force_process: ValueNode,  # process or load
         prop: ValueNode,
         niggli: ValueNode,
         primitive: ValueNode,
@@ -33,22 +35,27 @@ class CrystDataset(Dataset):
     ):
         super().__init__()
         self.path = path
+        self.save_path = save_path
+        self.force_process = force_process
         self.name = name
-        # self.df = pd.read_csv(path)
         self.prop = prop
         self.niggli = niggli
         self.primitive = primitive
         self.graph_method = graph_method
         self.lattice_scale_method = lattice_scale_method
 
-        self.cached_data = preprocess(
-            self.path,
-            preprocess_workers,
-            niggli=self.niggli,
-            primitive=self.primitive,
-            graph_method=self.graph_method,
-            prop_list=[prop],
-        )
+        if self.force_process or not Path(self.save_path).exists():
+            self.cached_data = preprocess(
+                self.path,
+                preprocess_workers,
+                niggli=self.niggli,
+                primitive=self.primitive,
+                graph_method=self.graph_method,
+                prop_list=[prop],
+            )
+            pickle.dump(self.cached_data, open(self.save_path, 'wb'))
+        else:
+            self.cached_data = pickle.load(open(self.save_path, 'rb'))
 
         add_scaled_lattice_prop(self.cached_data, lattice_scale_method)
         self.lattice_scaler = None
@@ -57,10 +64,12 @@ class CrystDataset(Dataset):
     def __len__(self) -> int:
         return len(self.cached_data)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> Data:
         data_dict = self.cached_data[index]
 
         # scaler is set in DataModule set stage
+        # if (self.lattice_scaler is None) or (self.scaler is None):
+        #     raise ValueError("Scaler should be set before used")
         prop = self.scaler.transform(data_dict[self.prop])
         (
             frac_coords,
@@ -92,7 +101,9 @@ class CrystDataset(Dataset):
         return data
 
     def __repr__(self) -> str:
-        return f"CrystDataset({self.name=}, {self.path=})"
+        return (
+            f"CrystDataset({self.name=}, {self.path=}, {self.save_path=})"
+        )
 
 
 class TensorCrystDataset(Dataset):
@@ -174,17 +185,10 @@ def main(cfg: omegaconf.DictConfig):
         dataset.cached_data, key='scaled_lattice'
     )
     scaler = get_scaler_from_data_list(dataset.cached_data, key=dataset.prop)
-
     dataset.lattice_scaler = lattice_scaler
     dataset.scaler = scaler
-
-    # pkl_path = Path(cfg.data.datamodule.datasets.train.save_path)
-    # if cfg.data.datamodule.datasets.train.force_save or not pkl_path.exists():
-    #     pickle.dump(dataset, open(pkl_path, 'wb'))
-    # dataset_load = pickle.load(open(pkl_path, 'rb'))
-    # print(dataset_load)
-    # print(dataset_load.scaler)
-
+    print(dataset)
+    # -----------
     # print(dataset.lattice_scaler)
     # print(dataset.scaler)
     # print(dataset[0])
