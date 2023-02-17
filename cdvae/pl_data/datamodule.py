@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig
 from torch.utils.data import Dataset
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 
 from cdvae.common.data_utils import get_scaler_from_data_list
 from cdvae.common.utils import PROJECT_ROOT
@@ -149,11 +149,14 @@ def main(cfg: omegaconf.DictConfig):
     datamodule: pl.LightningDataModule = hydra.utils.instantiate(
         cfg.data.datamodule, _recursive_=False
     )
-    datamodule.setup('fit')
-    print(next(iter(datamodule.train_dataloader())))
-    import pdb
+    datamodule.setup()
+    batch = next(iter(datamodule.train_dataloader()))
+    print(batch)
+    # print(batch.atom_types)
+    # print(batch.frac_coords)
+    # import pdb
 
-    pdb.set_trace()
+    # pdb.set_trace()
 
 
 if __name__ == "__main__":

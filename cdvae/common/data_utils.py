@@ -853,7 +853,7 @@ def preprocess(
         mpid_to_results[df.iloc[idx]['material_id']] for idx in range(len(df))
     ]
 
-    return ordered_results
+    return ordered_results  # list of dict [{1}, {2}, ...]
 
 
 def preprocess_tensors(crystal_array_list, niggli, primitive, graph_method):
