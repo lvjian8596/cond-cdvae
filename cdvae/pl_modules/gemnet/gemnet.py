@@ -3,6 +3,9 @@ Copyright (c) Facebook, Inc. and its affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
+
+Adapted output of regress_forces, output h_a
+Treat F -> s_X, h_a -> emb of p_A (atom self-interaction, emb_size_atom)
 """
 
 from typing import Optional

@@ -223,7 +223,8 @@ class DimeNetPlusPlus(torch.nn.Module):
         self.num_blocks = num_blocks
 
         self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)
-        self.sbf = SphericalBasisLayer(
+        print("Initializing SphericalBasisLayer ...")
+        self.sbf = SphericalBasisLayer(  # require a lot of init time
             num_spherical, num_radial, cutoff, envelope_exponent
         )
 
