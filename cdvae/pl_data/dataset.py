@@ -72,7 +72,7 @@ class CrystDataset(Dataset):
         # scaler is set in DataModule set stage
         # if (self.lattice_scaler is None) or (self.scaler is None):
         #     raise ValueError("Scaler should be set before used")
-        prop = self.scaler.transform(data_dict[self.prop])
+        prop = self.scaler.transform(torch.tensor(data_dict[self.prop]))
         (
             frac_coords,
             atom_types,
@@ -91,9 +91,8 @@ class CrystDataset(Dataset):
             atom_types=torch.LongTensor(atom_types),
             lengths=torch.Tensor(lengths).view(1, -1),
             angles=torch.Tensor(angles).view(1, -1),
-            edge_index=torch.LongTensor(
-                edge_indices.T
-            ).contiguous(),  # shape (2, num_edges)
+            edge_index=torch.LongTensor(edge_indices.T).contiguous(),
+            # shape (2, num_edges)
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
@@ -103,9 +102,7 @@ class CrystDataset(Dataset):
         return data
 
     def __repr__(self) -> str:
-        return (
-            f"CrystDataset({self.name=}, {self.path=}, {self.save_path=})"
-        )
+        return f"CrystDataset({self.name=}, {self.path=}, {self.save_path=})"
 
 
 class TensorCrystDataset(Dataset):
