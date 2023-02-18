@@ -21,6 +21,7 @@ from cdvae.common.data_utils import (
 )
 from cdvae.common.utils import PROJECT_ROOT
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
+from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
 
 
 def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim):
@@ -29,6 +30,33 @@ def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim):
         mods += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
     mods += [nn.Linear(hidden_dim, out_dim)]
     return nn.Sequential(*mods)
+
+
+class CatLatent(nn.Module):
+    """cat (z, c, N)
+    z:             (Batch, lattent_dim)
+    c: atom_types, (Nnode,)
+    N: num_atoms,  (Batch,)
+
+    c -> Emb(c)              (Nnode, emb_size_atom)
+    Emb(c) -> Agg(Emb(c))    (Batch, emb_size_atom)
+    cat([z, Agg(Emb(c))])    (Batch, +)
+    mlp([cat])               (Batch, lattent_dim)
+    """
+
+    def __init__(self, emb_size_atom, latent_dim) -> None:
+        super().__init__()
+        self.atom_emb = AtomEmbedding(emb_size_atom)
+        self.latent_emb = nn.Linear(emb_size_atom + latent_dim, latent_dim)
+
+    def forward(self, z, atom_types, batch):
+        atom_emb = self.atom_emb(atom_types)
+        # aggregate
+        atom_emb = scatter(atom_emb, batch, dim=0, reduce='mean')
+        # concatenate
+        z = torch.cat([z, atom_emb], dim=1)
+        z = self.latent_emb(z)
+        return z
 
 
 class BaseModule(pl.LightningModule):
@@ -66,6 +94,10 @@ class CDVAE(BaseModule):
             self.hparams.encoder, num_targets=self.hparams.latent_dim
         )
         self.decoder = hydra.utils.instantiate(self.hparams.decoder)
+
+        self.catlatent = CatLatent(
+            self.hparams.hidden_dim, self.hparams.latent_dim
+        )
 
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         self.fc_var = nn.Linear(
@@ -156,16 +188,18 @@ class CDVAE(BaseModule):
         hidden = self.encoder(batch)
         mu = self.fc_mu(hidden)
         log_var = self.fc_var(hidden)
+        # ======== debug =========
         for parm in self.fc_var.parameters():
             if torch.max(parm) > 1000:
                 print(torch.max(parm), torch.max(log_var).item())
+        # ========================
         z = self.reparameterize(mu, log_var)
         return mu, log_var, z
 
     def decode_stats(
         self,
         z,
-        gt_num_atoms=None,
+        gt_num_atoms,
         gt_lengths=None,
         gt_angles=None,
         teacher_forcing=False,
@@ -174,31 +208,20 @@ class CDVAE(BaseModule):
         decode key stats from latent embeddings.
         batch is input during training for teach-forcing.
         """
+        lengths_and_angles, lengths, angles = self.predict_lattice(
+            z, gt_num_atoms
+        )
         # Train stage
-        if gt_num_atoms is not None:
-            num_atoms = self.predict_num_atoms(z)
-            # (Nnode, max_atoms + 1)
-            lengths_and_angles, lengths, angles = self.predict_lattice(
-                z, gt_num_atoms
-            )
-            composition_per_atom = self.predict_composition(z, gt_num_atoms)
-            if self.hparams.teacher_forcing_lattice and teacher_forcing:
-                lengths = gt_lengths
-                angles = gt_angles
+        if self.hparams.teacher_forcing_lattice and teacher_forcing:
+            lengths = gt_lengths
+            angles = gt_angles
         # Generate stage, i.e. langevin dynamics
         else:
-            num_atoms = self.predict_num_atoms(z).argmax(dim=-1)  # to int
-            # (Nnode,)
-            lengths_and_angles, lengths, angles = self.predict_lattice(
-                z, num_atoms
-            )
-            composition_per_atom = self.predict_composition(z, num_atoms)
+            pass
         return (
-            num_atoms,
             lengths_and_angles,
             lengths,
             angles,
-            composition_per_atom,
         )
 
     @torch.no_grad()
@@ -318,18 +341,25 @@ class CDVAE(BaseModule):
         samples = self.langevin_dynamics(z, ld_kwargs)
         return samples
 
-    def forward(self, batch, teacher_forcing=True, training=True):
+    def forward(self, batch, teacher_forcing=False, training=True):
         # hacky way to resolve the NaN issue. Will need more careful debugging later.
         mu, log_var, z = self.encode(batch)
+        # z (B, lattent_dim)
 
+        # conditional z
+        cond_z = self.catlatent(z, batch.atom_types, batch.batch)
+
+        # pred lattice from cond_z
         (
-            pred_num_atoms,  # category with out normarlize  (B, max_atoms + 1)
             pred_lengths_and_angles,  # (B, 6)
             pred_lengths,  # (B, 3)
             pred_angles,  # (B, 3)
-            pred_composition_per_atom,  # (Nnode, MAX_ATOMIC_NUM)
         ) = self.decode_stats(
-            z, batch.num_atoms, batch.lengths, batch.angles, teacher_forcing
+            cond_z,
+            batch.num_atoms,
+            batch.lengths,
+            batch.angles,
+            teacher_forcing,
         )
 
         # sample noise levels. noise on each atom
@@ -729,26 +759,30 @@ class CDVAE(BaseModule):
 
 @hydra.main(config_path=str(PROJECT_ROOT / "conf"), config_name="default")
 def main(cfg: omegaconf.DictConfig):
-    cdvae = hydra.utils.instantiate(
-        cfg.model,
-        optim=cfg.optim,
-        data=cfg.data,
-        logging=cfg.logging,
-        _recursive_=False,
-    )
-    # -----------------
     datamodule: pl.LightningDataModule = hydra.utils.instantiate(
         cfg.data.datamodule, _recursive_=False
     )
     datamodule.setup('fit')
-    cdvae.lattice_scaler = datamodule.lattice_scaler.copy()
-    cdvae.scaler = datamodule.scaler.copy()
     batch = next(iter(datamodule.train_dataloader()))
-    # -----------------
     print(batch)
+    # =========================================
+    catlatent = CatLatent(cfg.model.hidden_dim, cfg.model.latent_dim)
+    z = torch.zeros((batch.num_graphs, cfg.model.latent_dim))
+    print(catlatent(z, batch.atom_types, batch.batch))
+    # cdvae = hydra.utils.instantiate(
+    #     cfg.model,
+    #     optim=cfg.optim,
+    #     data=cfg.data,
+    #     logging=cfg.logging,
+    #     _recursive_=False,
+    # )
+    # -----------------
+    # cdvae.lattice_scaler = datamodule.lattice_scaler.copy()
+    # cdvae.scaler = datamodule.scaler.copy()
+    # -----------------
     # trainer = pl.Trainer(fast_dev_run=True)
     # trainer.fit(model=cdvae, datamodule=datamodule)
-    cdvae(batch)
+    # cdvae(batch)
     # _, _, z = cdvae.encode(batch)
     # print(z.shape)
     # na, la, l, a, c = cdvae.decode_stats(z)
