@@ -782,7 +782,8 @@ class StandardScalerTorch(object):
         self.stds = torch.std(X, dim=0, unbiased=False) + EPSILON
 
     def transform(self, X):
-        X = torch.tensor(X, dtype=torch.float)
+        # X = torch.tensor(X, dtype=torch.float)
+        X = X.clone().detach().float()
         return (X - self.means) / self.stds
 
     def inverse_transform(self, X):
