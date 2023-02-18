@@ -27,8 +27,6 @@ datamodule:
       _target_: cdvae.pl_data.dataset.CrystDataset
       name: Formation energy train
       path: ${data.root_path}/train.csv
-      save_path: ${data.root_path}/train.pkl  # save the processed dataset
-      force_save: true  # force to process again or not
       prop: ${data.prop}
       niggli: ${data.niggli}
       primitive: ${data.primitive}
