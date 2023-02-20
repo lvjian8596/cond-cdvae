@@ -32,31 +32,47 @@ def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim):
     return nn.Sequential(*mods)
 
 
-class CatLatent(nn.Module):
+class CompositionCondition(nn.Module):
     """cat (z, c, N)
     z:             (Batch, lattent_dim)
     c: atom_types, (Nnode,)
     N: num_atoms,  (Batch,)
 
+    Batch means for each sample, Nnode means for each atom
+
+    1. Concatenate
+              emb(cond)
+                 |                   |mlp|
+        z  ---  cat  -> [z, emb(cond)] -> [cond_z]
+
     c -> Emb(c)              (Nnode, emb_size_atom)
     Emb(c) -> Agg(Emb(c))    (Batch, emb_size_atom)
-    cat([z, Agg(Emb(c))])    (Batch, +)
+    cat([z, Agg(Emb(c))])    (Batch, ...)
     mlp([cat])               (Batch, lattent_dim)
     """
 
-    def __init__(self, emb_size_atom, latent_dim) -> None:
+    def __init__(self, emb_size_atom, latent_dim, mode='concatenate') -> None:
         super().__init__()
+        self.mode = mode
         self.atom_emb = AtomEmbedding(emb_size_atom)
         self.latent_emb = nn.Linear(emb_size_atom + latent_dim, latent_dim)
 
-    def forward(self, z, atom_types, batch):
-        atom_emb = self.atom_emb(atom_types)
-        # aggregate
-        atom_emb = scatter(atom_emb, batch, dim=0, reduce='mean')
-        # concatenate
-        z = torch.cat([z, atom_emb], dim=1)
-        z = self.latent_emb(z)
-        return z
+    def forward(self, z, atom_types, batch):  # return cond_z
+        if self.mode.startswith('concat'):
+            # (Nnode, emb)
+            atom_emb = self.atom_emb(atom_types)
+            # aggregate  (Batch, emb)
+            atom_emb = scatter(atom_emb, batch, dim=0, reduce='mean')
+            # concatenate  (Batch)
+            z = torch.cat([z, atom_emb], dim=1)
+            z = self.latent_emb(z)
+            return z
+        elif self.mode.startswith('biasing'):
+            pass
+        elif self.mode.startswith('scaling'):
+            pass
+        elif self.mode.startswith('film'):
+            pass
 
 
 class BaseModule(pl.LightningModule):
@@ -95,7 +111,7 @@ class CDVAE(BaseModule):
         )
         self.decoder = hydra.utils.instantiate(self.hparams.decoder)
 
-        self.catlatent = CatLatent(
+        self.comp_cond = CompositionCondition(
             self.hparams.hidden_dim, self.hparams.latent_dim
         )
 
@@ -347,7 +363,7 @@ class CDVAE(BaseModule):
         # z (B, lattent_dim)
 
         # conditional z
-        cond_z = self.catlatent(z, batch.atom_types, batch.batch)
+        cond_z = self.comp_cond(z, batch.atom_types, batch.batch)
 
         # pred lattice from cond_z
         (
@@ -372,29 +388,6 @@ class CDVAE(BaseModule):
         used_sigmas_per_atom = self.sigmas[noise_level].repeat_interleave(
             batch.num_atoms, dim=0
         )
-
-        type_noise_level = torch.randint(
-            0,
-            self.type_sigmas.size(0),
-            (batch.num_atoms.size(0),),
-            device=self.device,
-        )
-        used_type_sigmas_per_atom = self.type_sigmas[
-            type_noise_level
-        ].repeat_interleave(batch.num_atoms, dim=0)
-
-        # add noise to atom types and sample atom types.
-        pred_composition_probs = F.softmax(
-            pred_composition_per_atom.detach(), dim=-1
-        )  # (Nnode, MAX_ATOMIC_NUM), prob of each atom type
-        atom_type_probs = (
-            F.one_hot(batch.atom_types - 1, num_classes=MAX_ATOMIC_NUM)
-            + pred_composition_probs * used_type_sigmas_per_atom[:, None]
-        )  # p_A + p_c * sigmaA  # (Nnode, MAX_ATOMIC_NUM), add noise to prob
-        rand_atom_types = (
-            torch.multinomial(atom_type_probs, num_samples=1).squeeze(1)  # ~A
-            + 1
-        )  # (Nnode, 1) squeeze to (Nnode,), sample row index(i.e. atomic number)
 
         # add noise to the cart coords
         cart_noises_per_atom = (
