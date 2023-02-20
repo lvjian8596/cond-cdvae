@@ -11,8 +11,15 @@ from torch_geometric.data import Batch
 from eval_utils import load_model
 
 
-def reconstructon(loader, model, ld_kwargs, num_evals,
-                  force_num_atoms=False, force_atom_types=False, down_sample_traj_step=1):
+def reconstructon(
+    loader,
+    model,
+    ld_kwargs,
+    num_evals,
+    force_num_atoms=False,
+    force_atom_types=False,
+    down_sample_traj_step=1,
+):
     """
     reconstruct the crystals in <loader>.
     """
@@ -41,7 +48,8 @@ def reconstructon(loader, model, ld_kwargs, num_evals,
             gt_num_atoms = batch.num_atoms if force_num_atoms else None
             gt_atom_types = batch.atom_types if force_atom_types else None
             outputs = model.langevin_dynamics(
-                z, ld_kwargs, gt_num_atoms, gt_atom_types)
+                z, ld_kwargs, gt_num_atoms, gt_atom_types
+            )
 
             # collect sampled crystals in this batch.
             batch_frac_coords.append(outputs['frac_coords'].detach().cpu())
@@ -51,9 +59,15 @@ def reconstructon(loader, model, ld_kwargs, num_evals,
             batch_angles.append(outputs['angles'].detach().cpu())
             if ld_kwargs.save_traj:
                 batch_all_frac_coords.append(
-                    outputs['all_frac_coords'][::down_sample_traj_step].detach().cpu())
+                    outputs['all_frac_coords'][::down_sample_traj_step]
+                    .detach()
+                    .cpu()
+                )
                 batch_all_atom_types.append(
-                    outputs['all_atom_types'][::down_sample_traj_step].detach().cpu())
+                    outputs['all_atom_types'][::down_sample_traj_step]
+                    .detach()
+                    .cpu()
+                )
         # collect sampled crystals for this z.
         frac_coords.append(torch.stack(batch_frac_coords, dim=0))
         num_atoms.append(torch.stack(batch_num_atoms, dim=0))
@@ -62,9 +76,11 @@ def reconstructon(loader, model, ld_kwargs, num_evals,
         angles.append(torch.stack(batch_angles, dim=0))
         if ld_kwargs.save_traj:
             all_frac_coords_stack.append(
-                torch.stack(batch_all_frac_coords, dim=0))
+                torch.stack(batch_all_frac_coords, dim=0)
+            )
             all_atom_types_stack.append(
-                torch.stack(batch_all_atom_types, dim=0))
+                torch.stack(batch_all_atom_types, dim=0)
+            )
         # Save the ground truth structure
         input_data_list = input_data_list + batch.to_data_list()
 
@@ -79,12 +95,25 @@ def reconstructon(loader, model, ld_kwargs, num_evals,
     input_data_batch = Batch.from_data_list(input_data_list)
 
     return (
-        frac_coords, num_atoms, atom_types, lengths, angles,
-        all_frac_coords_stack, all_atom_types_stack, input_data_batch)
+        frac_coords,
+        num_atoms,
+        atom_types,
+        lengths,
+        angles,
+        all_frac_coords_stack,
+        all_atom_types_stack,
+        input_data_batch,
+    )
 
 
-def generation(model, ld_kwargs, num_batches_to_sample, num_samples_per_z,
-               batch_size=512, down_sample_traj_step=1):
+def generation(
+    model,
+    ld_kwargs,
+    num_batches_to_sample,
+    num_samples_per_z,
+    batch_size=512,
+    down_sample_traj_step=1,
+):
     all_frac_coords_stack = []
     all_atom_types_stack = []
     frac_coords = []
@@ -99,8 +128,9 @@ def generation(model, ld_kwargs, num_batches_to_sample, num_samples_per_z,
         batch_frac_coords, batch_num_atoms, batch_atom_types = [], [], []
         batch_lengths, batch_angles = [], []
 
-        z = torch.randn(batch_size, model.hparams.hidden_dim,
-                        device=model.device)
+        z = torch.randn(
+            batch_size, model.hparams.hidden_dim, device=model.device
+        )
 
         for sample_idx in range(num_samples_per_z):
             samples = model.langevin_dynamics(z, ld_kwargs)
@@ -113,9 +143,15 @@ def generation(model, ld_kwargs, num_batches_to_sample, num_samples_per_z,
             batch_angles.append(samples['angles'].detach().cpu())
             if ld_kwargs.save_traj:
                 batch_all_frac_coords.append(
-                    samples['all_frac_coords'][::down_sample_traj_step].detach().cpu())
+                    samples['all_frac_coords'][::down_sample_traj_step]
+                    .detach()
+                    .cpu()
+                )
                 batch_all_atom_types.append(
-                    samples['all_atom_types'][::down_sample_traj_step].detach().cpu())
+                    samples['all_atom_types'][::down_sample_traj_step]
+                    .detach()
+                    .cpu()
+                )
 
         # collect sampled crystals for this z.
         frac_coords.append(torch.stack(batch_frac_coords, dim=0))
@@ -125,9 +161,11 @@ def generation(model, ld_kwargs, num_batches_to_sample, num_samples_per_z,
         angles.append(torch.stack(batch_angles, dim=0))
         if ld_kwargs.save_traj:
             all_frac_coords_stack.append(
-                torch.stack(batch_all_frac_coords, dim=0))
+                torch.stack(batch_all_frac_coords, dim=0)
+            )
             all_atom_types_stack.append(
-                torch.stack(batch_all_atom_types, dim=0))
+                torch.stack(batch_all_atom_types, dim=0)
+            )
 
     frac_coords = torch.cat(frac_coords, dim=1)
     num_atoms = torch.cat(num_atoms, dim=1)
@@ -137,52 +175,72 @@ def generation(model, ld_kwargs, num_batches_to_sample, num_samples_per_z,
     if ld_kwargs.save_traj:
         all_frac_coords_stack = torch.cat(all_frac_coords_stack, dim=2)
         all_atom_types_stack = torch.cat(all_atom_types_stack, dim=2)
-    return (frac_coords, num_atoms, atom_types, lengths, angles,
-            all_frac_coords_stack, all_atom_types_stack)
+    return (
+        frac_coords,
+        num_atoms,
+        atom_types,
+        lengths,
+        angles,
+        all_frac_coords_stack,
+        all_atom_types_stack,
+    )
 
 
-def optimization(model, ld_kwargs, data_loader,
-                 num_starting_points=100, num_gradient_steps=5000,
-                 lr=1e-3, num_saved_crys=10):
+def optimization(
+    model,
+    ld_kwargs,
+    data_loader,
+    num_starting_points=100,
+    num_gradient_steps=5000,
+    lr=1e-3,
+    num_saved_crys=10,
+):
     if data_loader is not None:
         batch = next(iter(data_loader)).to(model.device)
         _, _, z = model.encode(batch)
         z = z[:num_starting_points].detach().clone()
         z.requires_grad = True
     else:
-        z = torch.randn(num_starting_points, model.hparams.hidden_dim,
-                        device=model.device)
+        z = torch.randn(
+            num_starting_points, model.hparams.hidden_dim, device=model.device
+        )
         z.requires_grad = True
 
     opt = Adam([z], lr=lr)
     model.freeze()
 
     all_crystals = []
-    interval = num_gradient_steps // (num_saved_crys-1)
+    interval = num_gradient_steps // (num_saved_crys - 1)
     for i in tqdm(range(num_gradient_steps)):
         opt.zero_grad()
         loss = model.fc_property(z).mean()
         loss.backward()
         opt.step()
 
-        if i % interval == 0 or i == (num_gradient_steps-1):
+        if i % interval == 0 or i == (num_gradient_steps - 1):
             crystals = model.langevin_dynamics(z, ld_kwargs)
             all_crystals.append(crystals)
-    return {k: torch.cat([d[k] for d in all_crystals]).unsqueeze(0) for k in
-            ['frac_coords', 'atom_types', 'num_atoms', 'lengths', 'angles']}
+    return {
+        k: torch.cat([d[k] for d in all_crystals]).unsqueeze(0)
+        for k in ['frac_coords', 'atom_types', 'num_atoms', 'lengths', 'angles']
+    }
 
 
 def main(args):
     # load_data if do reconstruction.
     model_path = Path(args.model_path)
     model, test_loader, cfg = load_model(
-        model_path, load_data=('recon' in args.tasks) or
-        ('opt' in args.tasks and args.start_from == 'data'))
-    ld_kwargs = SimpleNamespace(n_step_each=args.n_step_each,
-                                step_lr=args.step_lr,
-                                min_sigma=args.min_sigma,
-                                save_traj=args.save_traj,
-                                disable_bar=args.disable_bar)
+        model_path,
+        load_data=('recon' in args.tasks)
+        or ('opt' in args.tasks and args.start_from == 'data'),
+    )
+    ld_kwargs = SimpleNamespace(
+        n_step_each=args.n_step_each,
+        step_lr=args.step_lr,
+        min_sigma=args.min_sigma,
+        save_traj=args.save_traj,
+        disable_bar=args.disable_bar,
+    )
 
     if torch.cuda.is_available():
         model.to('cuda')
@@ -190,54 +248,86 @@ def main(args):
     if 'recon' in args.tasks:
         print('Evaluate model on the reconstruction task.')
         start_time = time.time()
-        (frac_coords, num_atoms, atom_types, lengths, angles,
-         all_frac_coords_stack, all_atom_types_stack, input_data_batch) = reconstructon(
-            test_loader, model, ld_kwargs, args.num_evals,
-            args.force_num_atoms, args.force_atom_types, args.down_sample_traj_step)
+        (
+            frac_coords,
+            num_atoms,
+            atom_types,
+            lengths,
+            angles,
+            all_frac_coords_stack,
+            all_atom_types_stack,
+            input_data_batch,
+        ) = reconstructon(
+            test_loader,
+            model,
+            ld_kwargs,
+            args.num_evals,
+            args.force_num_atoms,
+            args.force_atom_types,
+            args.down_sample_traj_step,
+        )
 
         if args.label == '':
             recon_out_name = 'eval_recon.pt'
         else:
             recon_out_name = f'eval_recon_{args.label}.pt'
 
-        torch.save({
-            'eval_setting': args,
-            'input_data_batch': input_data_batch,
-            'frac_coords': frac_coords,
-            'num_atoms': num_atoms,
-            'atom_types': atom_types,
-            'lengths': lengths,
-            'angles': angles,
-            'all_frac_coords_stack': all_frac_coords_stack,
-            'all_atom_types_stack': all_atom_types_stack,
-            'time': time.time() - start_time
-        }, model_path / recon_out_name)
+        torch.save(
+            {
+                'eval_setting': args,
+                'input_data_batch': input_data_batch,
+                'frac_coords': frac_coords,
+                'num_atoms': num_atoms,
+                'atom_types': atom_types,
+                'lengths': lengths,
+                'angles': angles,
+                'all_frac_coords_stack': all_frac_coords_stack,
+                'all_atom_types_stack': all_atom_types_stack,
+                'time': time.time() - start_time,
+            },
+            model_path / recon_out_name,
+        )
 
     if 'gen' in args.tasks:
         print('Evaluate model on the generation task.')
         start_time = time.time()
 
-        (frac_coords, num_atoms, atom_types, lengths, angles,
-         all_frac_coords_stack, all_atom_types_stack) = generation(
-            model, ld_kwargs, args.num_batches_to_samples, args.num_evals,
-            args.batch_size, args.down_sample_traj_step)
+        (
+            frac_coords,
+            num_atoms,
+            atom_types,
+            lengths,
+            angles,
+            all_frac_coords_stack,
+            all_atom_types_stack,
+        ) = generation(
+            model,
+            ld_kwargs,
+            args.num_batches_to_samples,
+            args.num_evals,
+            args.batch_size,
+            args.down_sample_traj_step,
+        )
 
         if args.label == '':
             gen_out_name = 'eval_gen.pt'
         else:
             gen_out_name = f'eval_gen_{args.label}.pt'
 
-        torch.save({
-            'eval_setting': args,
-            'frac_coords': frac_coords,
-            'num_atoms': num_atoms,
-            'atom_types': atom_types,
-            'lengths': lengths,
-            'angles': angles,
-            'all_frac_coords_stack': all_frac_coords_stack,
-            'all_atom_types_stack': all_atom_types_stack,
-            'time': time.time() - start_time
-        }, model_path / gen_out_name)
+        torch.save(
+            {
+                'eval_setting': args,
+                'frac_coords': frac_coords,
+                'num_atoms': num_atoms,
+                'atom_types': atom_types,
+                'lengths': lengths,
+                'angles': angles,
+                'all_frac_coords_stack': all_frac_coords_stack,
+                'all_atom_types_stack': all_atom_types_stack,
+                'time': time.time() - start_time,
+            },
+            model_path / gen_out_name,
+        )
 
     if 'opt' in args.tasks:
         print('Evaluate model on the property optimization task.')
@@ -247,8 +337,9 @@ def main(args):
         else:
             loader = None
         optimized_crystals = optimization(model, ld_kwargs, loader)
-        optimized_crystals.update({'eval_setting': args,
-                                   'time': time.time() - start_time})
+        optimized_crystals.update(
+            {'eval_setting': args, 'time': time.time() - start_time}
+        )
 
         if args.label == '':
             gen_out_name = 'eval_opt.pt'
