@@ -7,6 +7,8 @@ from torch.optim import Adam
 from pathlib import Path
 from types import SimpleNamespace
 from torch_geometric.data import Batch
+from itertools import chain
+from pymatgen.core.composition import Composition
 
 from eval_utils import load_model
 
@@ -43,6 +45,8 @@ def reconstructon(
 
         # only sample one z, multiple evals for stoichaticity in langevin dynamics
         _, _, z = model.encode(batch)
+        # conditional z
+        z = model.comp_cond(z, batch.atom_types, batch.num_atoms)
 
         for eval_idx in range(num_evals):
             gt_num_atoms = batch.num_atoms if force_num_atoms else None
@@ -108,6 +112,7 @@ def reconstructon(
 
 def generation(
     model,
+    formula,
     ld_kwargs,
     num_batches_to_sample,
     num_samples_per_z,
@@ -122,6 +127,20 @@ def generation(
     lengths = []
     angles = []
 
+    comp = Composition(formula)
+    each_atom_types = list(
+        chain.from_iterable(
+            [elem.number] * int(n)
+            for elem, n in Composition(
+                Composition('H2O').get_integer_formula_and_factor()[0]
+            ).items()
+        )
+    )
+    num_atoms = [len(each_atom_types)] * batch_size  # (B,)
+    num_atoms = torch.tensor(num_atoms, device=model.device)
+    atom_types = each_atom_types * batch_size  # (Nnode,)
+    atom_types = torch.tensor(atom_types, device=model.device)
+
     for z_idx in range(num_batches_to_sample):
         batch_all_frac_coords = []
         batch_all_atom_types = []
@@ -131,6 +150,8 @@ def generation(
         z = torch.randn(
             batch_size, model.hparams.hidden_dim, device=model.device
         )
+        # cond z
+        z = model.comp_cond(z, atom_types, num_atoms)
 
         for sample_idx in range(num_samples_per_z):
             samples = model.langevin_dynamics(z, ld_kwargs)
@@ -302,6 +323,7 @@ def main(args):
             all_atom_types_stack,
         ) = generation(
             model,
+            args.formula,
             ld_kwargs,
             args.num_batches_to_samples,
             args.num_evals,
@@ -330,22 +352,23 @@ def main(args):
         )
 
     if 'opt' in args.tasks:
-        print('Evaluate model on the property optimization task.')
-        start_time = time.time()
-        if args.start_from == 'data':
-            loader = test_loader
-        else:
-            loader = None
-        optimized_crystals = optimization(model, ld_kwargs, loader)
-        optimized_crystals.update(
-            {'eval_setting': args, 'time': time.time() - start_time}
-        )
+        print("Unable to do 'opt', skip")
+        # print('Evaluate model on the property optimization task.')
+        # start_time = time.time()
+        # if args.start_from == 'data':
+        #     loader = test_loader
+        # else:
+        #     loader = None
+        # optimized_crystals = optimization(model, ld_kwargs, loader)
+        # optimized_crystals.update(
+        #     {'eval_setting': args, 'time': time.time() - start_time}
+        # )
 
-        if args.label == '':
-            gen_out_name = 'eval_opt.pt'
-        else:
-            gen_out_name = f'eval_opt_{args.label}.pt'
-        torch.save(optimized_crystals, model_path / gen_out_name)
+        # if args.label == '':
+        #     gen_out_name = 'eval_opt.pt'
+        # else:
+        #     gen_out_name = f'eval_opt_{args.label}.pt'
+        # torch.save(optimized_crystals, model_path / gen_out_name)
 
 
 if __name__ == '__main__':
@@ -365,6 +388,7 @@ if __name__ == '__main__':
     parser.add_argument('--force_atom_types', action='store_true')
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
+    parser.add_argument('--formula')
 
     args = parser.parse_args()
 
