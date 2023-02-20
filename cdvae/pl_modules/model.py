@@ -57,7 +57,10 @@ class CompositionCondition(nn.Module):
         self.atom_emb = AtomEmbedding(emb_size_atom)
         self.latent_emb = nn.Linear(emb_size_atom + latent_dim, latent_dim)
 
-    def forward(self, z, atom_types, batch):  # return cond_z
+    def forward(self, z, atom_types, num_atoms):  # return cond_z
+        batch = torch.arange(
+            len(num_atoms), device=num_atoms.device
+        ).repeat_interleave(num_atoms)
         if self.mode.startswith('concat'):
             # (Nnode, emb)
             atom_emb = self.atom_emb(atom_types)
@@ -241,9 +244,7 @@ class CDVAE(BaseModule):
         )
 
     @torch.no_grad()
-    def langevin_dynamics(
-        self, z, ld_kwargs, gt_num_atoms=None, gt_atom_types=None
-    ):
+    def langevin_dynamics(self, z, ld_kwargs, gt_num_atoms, gt_atom_types):
         """
         decode crystral structure from latent embeddings.
         ld_kwargs: args for doing annealed langevin dynamics sampling:
@@ -262,20 +263,19 @@ class CDVAE(BaseModule):
             all_atom_types = []
 
         # obtain key stats.
-        num_atoms, _, lengths, angles, composition_per_atom = self.decode_stats(
-            z, gt_num_atoms
-        )
+        _, lengths, angles = self.decode_stats(z, gt_num_atoms)
         if gt_num_atoms is not None:
             num_atoms = gt_num_atoms
 
         # obtain atom types.
-        composition_per_atom = F.softmax(composition_per_atom, dim=-1)
-        if gt_atom_types is None:
-            cur_atom_types = self.sample_composition(
-                composition_per_atom, num_atoms
-            )
-        else:
-            cur_atom_types = gt_atom_types
+        # composition_per_atom = F.softmax(composition_per_atom, dim=-1)
+        # if gt_atom_types is None:
+        #     cur_atom_types = self.sample_composition(
+        #         composition_per_atom, num_atoms
+        #     )
+        # else:
+        #     cur_atom_types = gt_atom_types
+        cur_atom_types = gt_atom_types
 
         # init coords.
         cur_frac_coords = torch.rand((num_atoms.sum(), 3), device=z.device)
@@ -315,7 +315,7 @@ class CDVAE(BaseModule):
                     cur_cart_coords, lengths, angles, num_atoms
                 )
 
-                if gt_atom_types is None:
+                if gt_atom_types is None:  # never used
                     cur_atom_types = torch.argmax(pred_atom_types, dim=1) + 1
 
                 if ld_kwargs.save_traj:
@@ -350,11 +350,15 @@ class CDVAE(BaseModule):
 
         return output_dict
 
-    def sample(self, num_samples, ld_kwargs):
+    def sample(self, gt_num_atoms, gt_atom_types, num_samples, ld_kwargs):
         z = torch.randn(
             num_samples, self.hparams.hidden_dim, device=self.device
         )
-        samples = self.langevin_dynamics(z, ld_kwargs)
+        # cond z
+        z = self.comp_cond(z, gt_atom_types, gt_num_atoms)
+        samples = self.langevin_dynamics(
+            z, ld_kwargs, gt_num_atoms, gt_atom_types
+        )
         return samples
 
     def forward(self, batch, teacher_forcing=False, training=True):
@@ -363,7 +367,7 @@ class CDVAE(BaseModule):
         # z (B, lattent_dim)
 
         # conditional z
-        cond_z = self.comp_cond(z, batch.atom_types, batch.batch)
+        cond_z = self.comp_cond(z, batch.atom_types, batch.num_atoms)
 
         # pred lattice from cond_z
         (
@@ -674,7 +678,7 @@ class CDVAE(BaseModule):
 
         loss = (
             # self.hparams.cost_natom * num_atom_loss
-            + self.hparams.cost_lattice * lattice_loss
+            +self.hparams.cost_lattice * lattice_loss
             + self.hparams.cost_coord * coord_loss
             # + self.hparams.cost_type * type_loss
             + self.hparams.beta * kld_loss
@@ -696,7 +700,8 @@ class CDVAE(BaseModule):
         if prefix != 'train':
             # validation/test loss only has coord and type
             loss = (
-                self.hparams.cost_coord * coord_loss
+                self.hparams.cost_coord
+                * coord_loss
                 # + self.hparams.cost_type * type_loss
             )
 
@@ -761,7 +766,7 @@ def main(cfg: omegaconf.DictConfig):
     # =========================================
     comp_cond = CompositionCondition(cfg.model.hidden_dim, cfg.model.latent_dim)
     z = torch.zeros((batch.num_graphs, cfg.model.latent_dim))
-    print(comp_cond(z, batch.atom_types, batch.batch))
+    print(comp_cond(z, batch.atom_types, batch.num_atoms))
     cdvae = hydra.utils.instantiate(
         cfg.model,
         optim=cfg.optim,
@@ -776,12 +781,35 @@ def main(cfg: omegaconf.DictConfig):
     # trainer = pl.Trainer(fast_dev_run=True)
     # trainer.fit(model=cdvae, datamodule=datamodule)
     cdvae(batch)
-    # _, _, z = cdvae.encode(batch)
-    # print(z.shape)
-    # na, la, l, a, c = cdvae.decode_stats(z)
-    # print(na.shape)
-    # na, la, l, a, c = cdvae.decode_stats(z, batch.num_atoms, batch.lengths, batch.angles, teacher_forcing=False)
-    # print(na.shape)
+    # Debug sample
+    cdvae.to('cuda')
+    from pymatgen.core.composition import Composition
+    from itertools import chain
+
+    comp = Composition('H2O')
+    n_sample = 10
+    each_atom_types = list(
+        chain.from_iterable(
+            [elem.number] * int(n)
+            for elem, n in Composition(
+                Composition('H2O').get_integer_formula_and_factor()[0]
+            ).items()
+        )
+    )
+    num_atoms = torch.tensor(
+        [len(each_atom_types)] * n_sample, device=cdvae.device
+    )
+    atom_types = torch.tensor(each_atom_types * n_sample, device=cdvae.device)
+    from types import SimpleNamespace
+    ld_kwargs = SimpleNamespace(
+        n_step_each=10,
+        step_lr=1e-4,
+        min_sigma=0,
+        save_traj=False,
+        disable_bar=False,
+    )
+    gen_samples = cdvae.sample(num_atoms, atom_types, n_sample, ld_kwargs)
+    print(gen_samples['frac_coords'].shape)
 
 
 if __name__ == '__main__':
