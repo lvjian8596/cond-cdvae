@@ -402,27 +402,27 @@ class CDVAE(BaseModule):
             cart_coords, pred_lengths, pred_angles, batch.num_atoms
         )
 
-        pred_cart_coord_diff, pred_atom_types = self.decoder(
+        pred_cart_coord_diff, _ = self.decoder(
             z,
             noisy_frac_coords,
-            rand_atom_types,
+            batch.atom_types,
             batch.num_atoms,
             pred_lengths,
             pred_angles,
         )
 
         # compute loss.
-        num_atom_loss = self.num_atom_loss(pred_num_atoms, batch)
+        # num_atom_loss = self.num_atom_loss(pred_num_atoms, batch)
         lattice_loss = self.lattice_loss(pred_lengths_and_angles, batch)
-        composition_loss = self.composition_loss(
-            pred_composition_per_atom, batch.atom_types, batch
-        )
+        # composition_loss = self.composition_loss(
+        #     pred_composition_per_atom, batch.atom_types, batch
+        # )
         coord_loss = self.coord_loss(
             pred_cart_coord_diff, noisy_frac_coords, used_sigmas_per_atom, batch
         )
-        type_loss = self.type_loss(
-            pred_atom_types, batch.atom_types, used_type_sigmas_per_atom, batch
-        )
+        # type_loss = self.type_loss(
+        #     pred_atom_types, batch.atom_types, used_type_sigmas_per_atom, batch
+        # )
 
         kld_loss = self.kld_loss(mu, log_var)
 
@@ -432,24 +432,24 @@ class CDVAE(BaseModule):
             property_loss = 0.0
 
         return {
-            'num_atom_loss': num_atom_loss,
+            # 'num_atom_loss': num_atom_loss,
             'lattice_loss': lattice_loss,
-            'composition_loss': composition_loss,
+            # 'composition_loss': composition_loss,
             'coord_loss': coord_loss,
-            'type_loss': type_loss,
+            # 'type_loss': type_loss,
             'kld_loss': kld_loss,
             'property_loss': property_loss,
-            'pred_num_atoms': pred_num_atoms,
+            # 'pred_num_atoms': pred_num_atoms,
             'pred_lengths_and_angles': pred_lengths_and_angles,
             'pred_lengths': pred_lengths,
             'pred_angles': pred_angles,
             'pred_cart_coord_diff': pred_cart_coord_diff,
-            'pred_atom_types': pred_atom_types,
-            'pred_composition_per_atom': pred_composition_per_atom,
+            # 'pred_atom_types': pred_atom_types,
+            # 'pred_composition_per_atom': pred_composition_per_atom,
             'target_frac_coords': batch.frac_coords,
             'target_atom_types': batch.atom_types,
             'rand_frac_coords': noisy_frac_coords,
-            'rand_atom_types': rand_atom_types,
+            # 'rand_atom_types': rand_atom_types,
             'z': z,
         }
 
@@ -664,47 +664,47 @@ class CDVAE(BaseModule):
         return loss
 
     def compute_stats(self, batch, outputs, prefix):
-        num_atom_loss = outputs['num_atom_loss']
+        # num_atom_loss = outputs['num_atom_loss']
         lattice_loss = outputs['lattice_loss']
         coord_loss = outputs['coord_loss']
-        type_loss = outputs['type_loss']
+        # type_loss = outputs['type_loss']
         kld_loss = outputs['kld_loss']
-        composition_loss = outputs['composition_loss']
+        # composition_loss = outputs['composition_loss']
         property_loss = outputs['property_loss']
 
         loss = (
-            self.hparams.cost_natom * num_atom_loss
+            # self.hparams.cost_natom * num_atom_loss
             + self.hparams.cost_lattice * lattice_loss
             + self.hparams.cost_coord * coord_loss
-            + self.hparams.cost_type * type_loss
+            # + self.hparams.cost_type * type_loss
             + self.hparams.beta * kld_loss
-            + self.hparams.cost_composition * composition_loss
+            # + self.hparams.cost_composition * composition_loss
             + self.hparams.cost_property * property_loss
         )
         assert torch.isfinite(loss)
 
         log_dict = {
             f'{prefix}_loss': loss,
-            f'{prefix}_natom_loss': num_atom_loss,
+            # f'{prefix}_natom_loss': num_atom_loss,
             f'{prefix}_lattice_loss': lattice_loss,
             f'{prefix}_coord_loss': coord_loss,
-            f'{prefix}_type_loss': type_loss,
+            # f'{prefix}_type_loss': type_loss,
             f'{prefix}_kld_loss': kld_loss,
-            f'{prefix}_composition_loss': composition_loss,
+            # f'{prefix}_composition_loss': composition_loss,
         }
 
         if prefix != 'train':
             # validation/test loss only has coord and type
             loss = (
                 self.hparams.cost_coord * coord_loss
-                + self.hparams.cost_type * type_loss
+                # + self.hparams.cost_type * type_loss
             )
 
             # evaluate num_atom prediction.
-            pred_num_atoms = outputs['pred_num_atoms'].argmax(dim=-1)
-            num_atom_accuracy = (
-                pred_num_atoms == batch.num_atoms
-            ).sum() / batch.num_graphs
+            # pred_num_atoms = outputs['pred_num_atoms'].argmax(dim=-1)
+            # num_atom_accuracy = (
+            #     pred_num_atoms == batch.num_atoms
+            # ).sum() / batch.num_graphs
 
             # evalute lattice prediction.
             pred_lengths_and_angles = outputs['pred_lengths_and_angles']
@@ -726,24 +726,24 @@ class CDVAE(BaseModule):
             volumes_mard = mard(true_volumes, pred_volumes)
 
             # evaluate atom type prediction.
-            pred_atom_types = outputs['pred_atom_types']
-            target_atom_types = outputs['target_atom_types']
-            type_accuracy = pred_atom_types.argmax(dim=-1) == (
-                target_atom_types - 1
-            )
-            type_accuracy = scatter(
-                type_accuracy.float(), batch.batch, dim=0, reduce='mean'
-            ).mean()
+            # pred_atom_types = outputs['pred_atom_types']
+            # target_atom_types = outputs['target_atom_types']
+            # type_accuracy = pred_atom_types.argmax(dim=-1) == (
+            #     target_atom_types - 1
+            # )
+            # type_accuracy = scatter(
+            #     type_accuracy.float(), batch.batch, dim=0, reduce='mean'
+            # ).mean()
 
             log_dict.update(
                 {
                     f'{prefix}_loss': loss,
                     f'{prefix}_property_loss': property_loss,
-                    f'{prefix}_natom_accuracy': num_atom_accuracy,
+                    # f'{prefix}_natom_accuracy': num_atom_accuracy,
                     f'{prefix}_lengths_mard': lengths_mard,
                     f'{prefix}_angles_mae': angles_mae,
                     f'{prefix}_volumes_mard': volumes_mard,
-                    f'{prefix}_type_accuracy': type_accuracy,
+                    # f'{prefix}_type_accuracy': type_accuracy,
                 }
             )
 
@@ -759,23 +759,23 @@ def main(cfg: omegaconf.DictConfig):
     batch = next(iter(datamodule.train_dataloader()))
     print(batch)
     # =========================================
-    catlatent = CatLatent(cfg.model.hidden_dim, cfg.model.latent_dim)
+    comp_cond = CompositionCondition(cfg.model.hidden_dim, cfg.model.latent_dim)
     z = torch.zeros((batch.num_graphs, cfg.model.latent_dim))
-    print(catlatent(z, batch.atom_types, batch.batch))
-    # cdvae = hydra.utils.instantiate(
-    #     cfg.model,
-    #     optim=cfg.optim,
-    #     data=cfg.data,
-    #     logging=cfg.logging,
-    #     _recursive_=False,
-    # )
+    print(comp_cond(z, batch.atom_types, batch.batch))
+    cdvae = hydra.utils.instantiate(
+        cfg.model,
+        optim=cfg.optim,
+        data=cfg.data,
+        logging=cfg.logging,
+        _recursive_=False,
+    )
     # -----------------
-    # cdvae.lattice_scaler = datamodule.lattice_scaler.copy()
-    # cdvae.scaler = datamodule.scaler.copy()
+    cdvae.lattice_scaler = datamodule.lattice_scaler.copy()
+    cdvae.scaler = datamodule.scaler.copy()
     # -----------------
     # trainer = pl.Trainer(fast_dev_run=True)
     # trainer.fit(model=cdvae, datamodule=datamodule)
-    # cdvae(batch)
+    cdvae(batch)
     # _, _, z = cdvae.encode(batch)
     # print(z.shape)
     # na, la, l, a, c = cdvae.decode_stats(z)
