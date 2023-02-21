@@ -650,6 +650,7 @@ class CDVAE(BaseModule):
             on_step=True,
             on_epoch=True,
             prog_bar=True,
+            batch_size=batch.num_graphs,
         )
         return loss
 
@@ -661,6 +662,7 @@ class CDVAE(BaseModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=batch.num_graphs,
         )
         return loss
 
@@ -669,6 +671,7 @@ class CDVAE(BaseModule):
         log_dict, loss = self.compute_stats(batch, outputs, prefix='test')
         self.log_dict(
             log_dict,
+            batch_size=batch.num_graphs,
         )
         return loss
 
