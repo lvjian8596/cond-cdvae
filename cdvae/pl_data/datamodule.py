@@ -150,8 +150,11 @@ def main(cfg: omegaconf.DictConfig):
         cfg.data.datamodule, _recursive_=False
     )
     datamodule.setup()
-    batch = next(iter(datamodule.train_dataloader()))
-    print(batch)
+    for val_loader in datamodule.val_dataloader():
+        for idx, batch in enumerate(val_loader):
+            if idx == 754:
+                print(batch)
+                print(batch.mp_id, batch.atom_types)
     # print(batch.atom_types)
     # print(batch.frac_coords)
     # import pdb
