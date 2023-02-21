@@ -98,6 +98,7 @@ class CrystDataset(Dataset):
             num_bonds=edge_indices.shape[0],
             num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
             y=prop.view(1, -1),
+            mp_id=data_dict['mp_id'],
         )
         return data
 
