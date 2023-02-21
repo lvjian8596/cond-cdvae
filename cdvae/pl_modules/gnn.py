@@ -1,6 +1,7 @@
 """This module is adapted from https://github.com/Open-Catalyst-Project/ocp/tree/master/ocpmodels/models
 DimeNet++
 """
+import warnings
 
 import hydra
 import omegaconf
@@ -421,6 +422,9 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         else:
             # TODO: if want to use cat, need two lines here
             energy = scatter(P, batch, dim=0, reduce=self.readout)
+
+        if energy.max() > 100:
+            warnings.warn("DimeNet++ output too large, may overflow!")
 
         return energy
 
