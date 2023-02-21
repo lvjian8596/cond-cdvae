@@ -194,6 +194,7 @@ class CDVAE(BaseModule):
         :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
         :return: (Tensor) [B x D]
         """
+        logvar = torch.clamp(logvar, None, 4)
         std = torch.exp(0.5 * logvar)
         assert torch.isfinite(logvar).all()
         assert torch.isfinite(std).all()
@@ -208,9 +209,13 @@ class CDVAE(BaseModule):
         mu = self.fc_mu(hidden)
         log_var = self.fc_var(hidden)
         # ======== debug =========
-        for parm in self.fc_var.parameters():
-            if torch.max(parm) > 1000:
-                print(torch.max(parm), torch.max(log_var).item())
+        # for parm in self.fc_var.parameters():
+        #     if torch.max(parm) > 1000:
+        #         print(torch.max(parm), torch.max(log_var).item())
+        # if torch.max(hidden) > 1000:
+        #     print(batch)
+        #     for parm in self.fc_var.parameters():
+        #         print(torch.max(parm)) 
         # ========================
         z = self.reparameterize(mu, log_var)
         return mu, log_var, z
