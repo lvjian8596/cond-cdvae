@@ -22,6 +22,12 @@ from cdvae.common.data_utils import (
 from cdvae.common.utils import PROJECT_ROOT
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
+from cdvae.pl_modules.conditioning import (
+    ConcatConditioning,
+    BiasConditioning,
+    ScaleConditioning,
+    FiLM,
+)
 
 
 def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim):
@@ -33,49 +39,48 @@ def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim):
 
 
 class CompositionCondition(nn.Module):
-    """cat (z, c, N)
-    z:             (Batch, lattent_dim)
-    c: atom_types, (Nnode,)
-    N: num_atoms,  (Batch,)
+    """ z on condition of (c, N)
+    z:                        (Batch, lattent_dim)
+    c: atom_types, each atom  (Nnode,)
+    N: num_atoms, each sample (Batch,)
 
-    Batch means for each sample, Nnode means for each atom
+    condition: Lin(Agg(emb(c), N))) -> composition embedding of each sample
 
-    1. Concatenate
-              emb(cond)
-                 |                   |mlp|
-        z  ---  cat  -> [z, emb(cond)] -> [cond_z]
+    c -> Emb(c)              (Nnode, emb_size_atom)  atom embedding
+    Emb(c) -> Agg(Emb(c))    (Batch, emb_size_atom)  sample embedding
 
-    c -> Emb(c)              (Nnode, emb_size_atom)
-    Emb(c) -> Agg(Emb(c))    (Batch, emb_size_atom)
-    cat([z, Agg(Emb(c))])    (Batch, ...)
-    mlp([cat])               (Batch, lattent_dim)
+    1. Concatenate 2. Bias 3. Scale 4. FiLM
     """
 
     def __init__(self, emb_size_atom, latent_dim, mode='concatenate') -> None:
         super().__init__()
         self.mode = mode
         self.atom_emb = AtomEmbedding(emb_size_atom)
-        self.latent_emb = nn.Linear(emb_size_atom + latent_dim, latent_dim)
+
+        if self.mode.startswith('concat') or self.mode.startswith('cat'):
+            self.cond_model = ConcatConditioning(
+                latent_dim, emb_size_atom, latent_dim
+            )
+        elif self.mode.startswith('bias'):
+            self.cond_model = BiasConditioning(latent_dim, emb_size_atom)
+        elif self.mode.startswith('scal'):
+            self.cond_model = ScaleConditioning(latent_dim, emb_size_atom)
+        elif self.mode.startswith('film'):
+            self.cond_model = FiLM(latent_dim, emb_size_atom)
+        else:
+            raise ValueError("Unknown mode")
 
     def forward(self, z, atom_types, num_atoms):  # return cond_z
         batch = torch.arange(
             len(num_atoms), device=num_atoms.device
         ).repeat_interleave(num_atoms)
-        if self.mode.startswith('concat'):
-            # (Nnode, emb)
-            atom_emb = self.atom_emb(atom_types)
-            # aggregate  (Batch, emb)
-            atom_emb = scatter(atom_emb, batch, dim=0, reduce='mean')
-            # concatenate  (Batch)
-            z = torch.cat([z, atom_emb], dim=1)
-            z = self.latent_emb(z)
-            return z
-        elif self.mode.startswith('biasing'):
-            pass
-        elif self.mode.startswith('scaling'):
-            pass
-        elif self.mode.startswith('film'):
-            pass
+        # (Nnode, emb)
+        atom_emb = self.atom_emb(atom_types)
+        # aggregate  (Batch, emb)
+        sample_emb = scatter(atom_emb, batch, dim=0, reduce='mean')
+
+        z = self.cond_model(z, sample_emb)
+        return z
 
 
 class BaseModule(pl.LightningModule):
@@ -215,7 +220,7 @@ class CDVAE(BaseModule):
         # if torch.max(hidden) > 1000:
         #     print(batch)
         #     for parm in self.fc_var.parameters():
-        #         print(torch.max(parm)) 
+        #         print(torch.max(parm))
         # ========================
         z = self.reparameterize(mu, log_var)
         return mu, log_var, z
@@ -774,7 +779,7 @@ def main(cfg: omegaconf.DictConfig):
     # =========================================
     comp_cond = CompositionCondition(cfg.model.hidden_dim, cfg.model.latent_dim)
     z = torch.zeros((batch.num_graphs, cfg.model.latent_dim))
-    print(comp_cond(z, batch.atom_types, batch.num_atoms))
+    print(comp_cond(z, batch.atom_types, batch.num_atoms).shape)
     cdvae = hydra.utils.instantiate(
         cfg.model,
         optim=cfg.optim,
@@ -782,15 +787,19 @@ def main(cfg: omegaconf.DictConfig):
         logging=cfg.logging,
         _recursive_=False,
     )
-    # -----------------
     cdvae.lattice_scaler = datamodule.lattice_scaler.copy()
     cdvae.scaler = datamodule.scaler.copy()
     # -----------------
     # trainer = pl.Trainer(fast_dev_run=True)
     # trainer.fit(model=cdvae, datamodule=datamodule)
-    cdvae(batch)
-    # Debug sample
     cdvae.to('cuda')
+    for val_loader in datamodule.val_dataloader():
+        for idx, batch in enumerate(val_loader):
+            batch.to('cuda')
+            returns = cdvae(batch)
+            z = returns['z']
+            print(idx, z.shape, z.max().item())
+    # Debug sample
     from pymatgen.core.composition import Composition
     from itertools import chain
 
@@ -809,6 +818,7 @@ def main(cfg: omegaconf.DictConfig):
     )
     atom_types = torch.tensor(each_atom_types * n_sample, device=cdvae.device)
     from types import SimpleNamespace
+
     ld_kwargs = SimpleNamespace(
         n_step_each=10,
         step_lr=1e-4,
