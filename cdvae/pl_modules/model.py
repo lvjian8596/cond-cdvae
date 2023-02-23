@@ -120,7 +120,9 @@ class CDVAE(BaseModule):
         self.decoder = hydra.utils.instantiate(self.hparams.decoder)
 
         self.comp_cond = CompositionCondition(
-            self.hparams.hidden_dim, self.hparams.latent_dim
+            self.hparams.hidden_dim,
+            self.hparams.latent_dim,
+            self.hparams.condition_mode,
         )
 
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
@@ -199,7 +201,7 @@ class CDVAE(BaseModule):
         overflow = torch.nonzero(overflow, as_tuple=True)[0]  # [idx1, idx2]
         if overflow.size(0) > 0:
             print(overflow)
-            print(batch.mp_id[overflow])
+            print("may overflow: ", [batch.mp_id[i] for i in overflow])
         mu = self.fc_mu(hidden)
         log_var = self.fc_var(hidden)
         # ======== debug =========
