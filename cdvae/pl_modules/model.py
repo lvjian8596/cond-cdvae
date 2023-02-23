@@ -39,7 +39,7 @@ def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim):
 
 
 class CompositionCondition(nn.Module):
-    """ z on condition of (c, N)
+    """z on condition of (c, N)
     z:                        (Batch, lattent_dim)
     c: atom_types, each atom  (Nnode,)
     N: num_atoms, each sample (Batch,)
@@ -128,23 +128,11 @@ class CDVAE(BaseModule):
             self.hparams.latent_dim, self.hparams.latent_dim
         )
 
-        self.fc_num_atoms = build_mlp(
-            self.hparams.latent_dim,
-            self.hparams.hidden_dim,
-            self.hparams.fc_num_layers,
-            self.hparams.max_atoms + 1,
-        )
         self.fc_lattice = build_mlp(
             self.hparams.latent_dim,
             self.hparams.hidden_dim,
             self.hparams.fc_num_layers,
             6,
-        )
-        self.fc_composition = build_mlp(
-            self.hparams.latent_dim,
-            self.hparams.hidden_dim,
-            self.hparams.fc_num_layers,
-            MAX_ATOMIC_NUM,
         )
         # for property prediction.
         if self.hparams.predict_property:
@@ -181,10 +169,6 @@ class CDVAE(BaseModule):
 
         self.type_sigmas = nn.Parameter(type_sigmas, requires_grad=False)
 
-        self.embedding = torch.zeros(100, 92)
-        for i in range(100):
-            self.embedding[i] = torch.tensor(KHOT_EMBEDDINGS[i + 1])
-
         # obtain from datamodule.
         self.lattice_scaler = StandardScalerTorch(
             torch.tensor(0), torch.tensor(1)
@@ -211,6 +195,11 @@ class CDVAE(BaseModule):
         encode crystal structures to latents.
         """
         hidden = self.encoder(batch)
+        overflow = torch.any(hidden > 100, axis=1)
+        overflow = torch.nonzero(overflow, as_tuple=True)[0]  # [idx1, idx2]
+        if overflow.size(0) > 0:
+            print(overflow)
+            print(batch.mp_id[overflow])
         mu = self.fc_mu(hidden)
         log_var = self.fc_var(hidden)
         # ======== debug =========
@@ -426,17 +415,10 @@ class CDVAE(BaseModule):
         )
 
         # compute loss.
-        # num_atom_loss = self.num_atom_loss(pred_num_atoms, batch)
         lattice_loss = self.lattice_loss(pred_lengths_and_angles, batch)
-        # composition_loss = self.composition_loss(
-        #     pred_composition_per_atom, batch.atom_types, batch
-        # )
         coord_loss = self.coord_loss(
             pred_cart_coord_diff, noisy_frac_coords, used_sigmas_per_atom, batch
         )
-        # type_loss = self.type_loss(
-        #     pred_atom_types, batch.atom_types, used_type_sigmas_per_atom, batch
-        # )
 
         kld_loss = self.kld_loss(mu, log_var)
 
@@ -446,89 +428,19 @@ class CDVAE(BaseModule):
             property_loss = 0.0
 
         return {
-            # 'num_atom_loss': num_atom_loss,
             'lattice_loss': lattice_loss,
-            # 'composition_loss': composition_loss,
             'coord_loss': coord_loss,
-            # 'type_loss': type_loss,
             'kld_loss': kld_loss,
             'property_loss': property_loss,
-            # 'pred_num_atoms': pred_num_atoms,
             'pred_lengths_and_angles': pred_lengths_and_angles,
             'pred_lengths': pred_lengths,
             'pred_angles': pred_angles,
             'pred_cart_coord_diff': pred_cart_coord_diff,
-            # 'pred_atom_types': pred_atom_types,
-            # 'pred_composition_per_atom': pred_composition_per_atom,
             'target_frac_coords': batch.frac_coords,
             'target_atom_types': batch.atom_types,
             'rand_frac_coords': noisy_frac_coords,
-            # 'rand_atom_types': rand_atom_types,
             'z': z,
         }
-
-    def generate_rand_init(
-        self,
-        pred_composition_per_atom,
-        pred_lengths,
-        pred_angles,
-        num_atoms,
-        batch,
-    ):
-        rand_frac_coords = torch.rand(
-            num_atoms.sum(), 3, device=num_atoms.device
-        )
-        pred_composition_per_atom = F.softmax(pred_composition_per_atom, dim=-1)
-        rand_atom_types = self.sample_composition(
-            pred_composition_per_atom, num_atoms
-        )
-        return rand_frac_coords, rand_atom_types
-
-    def sample_composition(self, composition_prob, num_atoms):
-        """
-        Samples composition such that it exactly satisfies composition_prob
-        """
-        batch = torch.arange(
-            len(num_atoms), device=num_atoms.device
-        ).repeat_interleave(num_atoms)
-        assert composition_prob.size(0) == num_atoms.sum() == batch.size(0)
-        composition_prob = scatter(
-            composition_prob, index=batch, dim=0, reduce='mean'
-        )
-
-        all_sampled_comp = []
-
-        for comp_prob, num_atom in zip(list(composition_prob), list(num_atoms)):
-            comp_num = torch.round(comp_prob * num_atom)
-            atom_type = torch.nonzero(comp_num, as_tuple=True)[0] + 1
-            atom_num = comp_num[atom_type - 1].long()
-
-            sampled_comp = atom_type.repeat_interleave(atom_num, dim=0)
-
-            # if the rounded composition gives less atoms, sample the rest
-            if sampled_comp.size(0) < num_atom:
-                left_atom_num = num_atom - sampled_comp.size(0)
-
-                left_comp_prob = comp_prob - comp_num.float() / num_atom
-
-                left_comp_prob[left_comp_prob < 0.0] = 0.0
-                left_comp = torch.multinomial(
-                    left_comp_prob, num_samples=left_atom_num, replacement=True
-                )
-                # convert to atomic number
-                left_comp = left_comp + 1
-                sampled_comp = torch.cat([sampled_comp, left_comp], dim=0)
-
-            sampled_comp = sampled_comp[torch.randperm(sampled_comp.size(0))]
-            sampled_comp = sampled_comp[:num_atom]
-            all_sampled_comp.append(sampled_comp)
-
-        all_sampled_comp = torch.cat(all_sampled_comp, dim=0)
-        assert all_sampled_comp.size(0) == num_atoms.sum()
-        return all_sampled_comp
-
-    def predict_num_atoms(self, z):
-        return self.fc_num_atoms(z)
 
     def predict_property(self, z):
         self.scaler.match_device(z)
@@ -549,15 +461,6 @@ class CDVAE(BaseModule):
         # <pred_lengths_and_angles> is scaled.
         return pred_lengths_and_angles, pred_lengths, pred_angles
 
-    def predict_composition(self, z, num_atoms):
-        # [z1, z2] repeat (2, 3) -> [z1, z1, z2, z2, z2]
-        z_per_atom = z.repeat_interleave(num_atoms, dim=0)
-        pred_composition_per_atom = self.fc_composition(z_per_atom)
-        return pred_composition_per_atom
-
-    def num_atom_loss(self, pred_num_atoms, batch):
-        return F.cross_entropy(pred_num_atoms, batch.num_atoms)
-
     def property_loss(self, z, batch):
         return F.mse_loss(self.fc_property(z), batch.y)
 
@@ -574,15 +477,6 @@ class CDVAE(BaseModule):
             target_lengths_and_angles
         )
         return F.mse_loss(pred_lengths_and_angles, target_lengths_and_angles)
-
-    def composition_loss(
-        self, pred_composition_per_atom, target_atom_types, batch
-    ):
-        target_atom_types = target_atom_types - 1
-        loss = F.cross_entropy(
-            pred_composition_per_atom, target_atom_types, reduction='none'
-        )
-        return scatter(loss, batch.batch, reduce='mean').mean()
 
     def coord_loss(
         self,
@@ -620,21 +514,6 @@ class CDVAE(BaseModule):
 
         loss_per_atom = 0.5 * loss_per_atom * used_sigmas_per_atom**2
         return scatter(loss_per_atom, batch.batch, reduce='mean').mean()
-
-    def type_loss(
-        self,
-        pred_atom_types,
-        target_atom_types,
-        used_type_sigmas_per_atom,
-        batch,
-    ):
-        target_atom_types = target_atom_types - 1
-        loss = F.cross_entropy(
-            pred_atom_types, target_atom_types, reduction='none'
-        )
-        # rescale loss according to noise
-        loss = loss / used_type_sigmas_per_atom
-        return scatter(loss, batch.batch, reduce='mean').mean()
 
     def kld_loss(self, mu, log_var):
         kld_loss = torch.mean(
@@ -681,48 +560,29 @@ class CDVAE(BaseModule):
         return loss
 
     def compute_stats(self, batch, outputs, prefix):
-        # num_atom_loss = outputs['num_atom_loss']
         lattice_loss = outputs['lattice_loss']
         coord_loss = outputs['coord_loss']
-        # type_loss = outputs['type_loss']
         kld_loss = outputs['kld_loss']
-        # composition_loss = outputs['composition_loss']
         property_loss = outputs['property_loss']
 
         loss = (
-            # self.hparams.cost_natom * num_atom_loss
             +self.hparams.cost_lattice * lattice_loss
             + self.hparams.cost_coord * coord_loss
-            # + self.hparams.cost_type * type_loss
             + self.hparams.beta * kld_loss
-            # + self.hparams.cost_composition * composition_loss
             + self.hparams.cost_property * property_loss
         )
         assert torch.isfinite(loss)
 
         log_dict = {
             f'{prefix}_loss': loss,
-            # f'{prefix}_natom_loss': num_atom_loss,
             f'{prefix}_lattice_loss': lattice_loss,
             f'{prefix}_coord_loss': coord_loss,
-            # f'{prefix}_type_loss': type_loss,
             f'{prefix}_kld_loss': kld_loss,
-            # f'{prefix}_composition_loss': composition_loss,
         }
 
         if prefix != 'train':
             # validation/test loss only has coord and type
-            loss = (
-                self.hparams.cost_coord
-                * coord_loss
-                # + self.hparams.cost_type * type_loss
-            )
-
-            # evaluate num_atom prediction.
-            # pred_num_atoms = outputs['pred_num_atoms'].argmax(dim=-1)
-            # num_atom_accuracy = (
-            #     pred_num_atoms == batch.num_atoms
-            # ).sum() / batch.num_graphs
+            loss = self.hparams.cost_coord * coord_loss
 
             # evalute lattice prediction.
             pred_lengths_and_angles = outputs['pred_lengths_and_angles']
@@ -743,25 +603,13 @@ class CDVAE(BaseModule):
             true_volumes = lengths_angles_to_volume(batch.lengths, batch.angles)
             volumes_mard = mard(true_volumes, pred_volumes)
 
-            # evaluate atom type prediction.
-            # pred_atom_types = outputs['pred_atom_types']
-            # target_atom_types = outputs['target_atom_types']
-            # type_accuracy = pred_atom_types.argmax(dim=-1) == (
-            #     target_atom_types - 1
-            # )
-            # type_accuracy = scatter(
-            #     type_accuracy.float(), batch.batch, dim=0, reduce='mean'
-            # ).mean()
-
             log_dict.update(
                 {
                     f'{prefix}_loss': loss,
                     f'{prefix}_property_loss': property_loss,
-                    # f'{prefix}_natom_accuracy': num_atom_accuracy,
                     f'{prefix}_lengths_mard': lengths_mard,
                     f'{prefix}_angles_mae': angles_mae,
                     f'{prefix}_volumes_mard': volumes_mard,
-                    # f'{prefix}_type_accuracy': type_accuracy,
                 }
             )
 
