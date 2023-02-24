@@ -1,4 +1,4 @@
-root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_10/mp10v1
+root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_10/mp10v2
 prop: formation_energy_per_atom
 num_targets: 1
 # prop: scaled_lattice
@@ -11,7 +11,7 @@ preprocess_workers: 30
 readout: mean
 max_atoms: 10
 otf_graph: false
-eval_model_name: mp20
+eval_model_name: mp10
 
 
 train_max_epochs: 1000
@@ -68,6 +68,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 256
+    train: 128
     val: 128
     test: 128

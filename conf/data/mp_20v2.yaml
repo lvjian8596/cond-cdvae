@@ -1,4 +1,4 @@
-root_path: ${oc.env:PROJECT_ROOT}/data/mp_20
+root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_20/mp20v2
 prop: formation_energy_per_atom
 num_targets: 1
 # prop: scaled_lattice
@@ -26,7 +26,7 @@ datamodule:
     train:
       _target_: cdvae.pl_data.dataset.CrystDataset
       name: Formation energy train
-      path: ${data.root_path}/train.csv
+      path: ${data.root_path}/train.feather  # crystal info
       save_path: ${data.root_path}/train.pkl  # processed data
       force_process: false  # force to process <crystal info> and save to <processed data>
       prop: ${data.prop}
@@ -39,9 +39,9 @@ datamodule:
     val:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy val
-        path: ${data.root_path}/val.csv
-        save_path: ${data.root_path}/val.pkl  # processed data
-        force_process: false  # force to process <crystal info> and save to <processed data>
+        path: ${data.root_path}/val.feather
+        save_path: ${data.root_path}/val.pkl  # path of processed data
+        force_process: false # force to preprocess and save again or not
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -52,9 +52,9 @@ datamodule:
     test:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy test
-        path: ${data.root_path}/test.csv
-        save_path: ${data.root_path}/test.pkl  # processed data
-        force_process: false  # force to process <crystal info> and save to <processed data>
+        path: ${data.root_path}/test.feather
+        save_path: ${data.root_path}/test.pkl  # path of processed data
+        force_process: false  # force to preprocess and save again or not
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -68,6 +68,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 256
-    val: 256
-    test: 256
+    train: 128
+    val: 128
+    test: 128

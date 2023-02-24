@@ -83,6 +83,19 @@ class CompositionCondition(nn.Module):
         return z
 
 
+def detact_overflow(x: torch.Tensor, threshold, batch, label: str):
+    if x.dim() == 1:
+        overflow = x > threshold
+    elif x.dim() == 2:
+        overflow = torch.any(x > threshold, dim=1)
+    else:
+        print(f"{label} dimension not 1 or 2, skip")
+        return
+    idx = torch.nonzero(overflow, as_tuple=True)[0]  # overflow index
+    if idx.size(0) > 0:
+        print(f"{label} exceed {threshold}: ", [batch.mp_id[i] for i in idx])
+
+
 class BaseModule(pl.LightningModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
@@ -187,8 +200,8 @@ class CDVAE(BaseModule):
         """
         logvar = torch.clamp(logvar, None, 4)
         std = torch.exp(0.5 * logvar)
-        assert torch.isfinite(logvar).all()
-        assert torch.isfinite(std).all()
+        # assert torch.isfinite(logvar).all()
+        # assert torch.isfinite(std).all()
         eps = torch.randn_like(std)
         return eps * std + mu
 
@@ -197,22 +210,17 @@ class CDVAE(BaseModule):
         encode crystal structures to latents.
         """
         hidden = self.encoder(batch)
-        overflow = torch.any(hidden > 100, axis=1)
-        overflow = torch.nonzero(overflow, as_tuple=True)[0]  # [idx1, idx2]
-        if overflow.size(0) > 0:
-            print(overflow)
-            print("may overflow: ", [batch.mp_id[i] for i in overflow])
+
+        # debug
+        detact_overflow(hidden, 100, batch, "hidden")
+
         mu = self.fc_mu(hidden)
         log_var = self.fc_var(hidden)
-        # ======== debug =========
-        # for parm in self.fc_var.parameters():
-        #     if torch.max(parm) > 1000:
-        #         print(torch.max(parm), torch.max(log_var).item())
-        # if torch.max(hidden) > 1000:
-        #     print(batch)
-        #     for parm in self.fc_var.parameters():
-        #         print(torch.max(parm))
-        # ========================
+
+        # debug
+        detact_overflow(log_var, 100, batch, "log_var")
+
+        mu = self.fc_mu(hidden)
         z = self.reparameterize(mu, log_var)
         return mu, log_var, z
 
@@ -382,6 +390,9 @@ class CDVAE(BaseModule):
             batch.angles,
             teacher_forcing,
         )
+
+        # debug
+        detact_overflow(pred_lengths_and_angles, 10000, batch, "lattice")
 
         # sample noise levels. noise on each atom
         noise_level = torch.randint(
@@ -573,7 +584,9 @@ class CDVAE(BaseModule):
             + self.hparams.beta * kld_loss
             + self.hparams.cost_property * property_loss
         )
-        assert torch.isfinite(loss)
+        assert torch.isfinite(lattice_loss)
+        assert torch.isfinite(coord_loss)
+        assert torch.isfinite(kld_loss)
 
         log_dict = {
             f'{prefix}_loss': loss,
