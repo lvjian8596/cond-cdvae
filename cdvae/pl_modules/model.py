@@ -122,6 +122,17 @@ class BaseModule(pl.LightningModule):
             },
         }
 
+    def configure_gradient_clipping(
+        self,
+        optimizer,
+        optimizer_idx,
+        gradient_clip_val,
+        gradient_clip_algorithm,
+    ):
+        self.clip_gradients(
+            optimizer, gradient_clip_val, gradient_clip_algorithm
+        )
+
 
 class CDVAE(BaseModule):
     def __init__(self, *args, **kwargs) -> None:
