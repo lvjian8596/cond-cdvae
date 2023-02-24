@@ -218,6 +218,7 @@ class CDVAE(BaseModule):
         log_var = self.fc_var(hidden)
 
         # debug
+        detact_overflow(mu, 100, batch, "mu")
         detact_overflow(log_var, 100, batch, "log_var")
 
         mu = self.fc_mu(hidden)
