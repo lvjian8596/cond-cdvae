@@ -1,3 +1,4 @@
+import warnings
 from typing import Any, Dict
 
 import hydra
@@ -89,11 +90,13 @@ def detact_overflow(x: torch.Tensor, threshold, batch, label: str):
     elif x.dim() == 2:
         overflow = torch.any(x > threshold, dim=1)
     else:
-        print(f"{label} dimension not 1 or 2, skip")
+        warnings.warn(f"{label} dimension not 1 or 2, skip")
         return
     idx = torch.nonzero(overflow, as_tuple=True)[0]  # overflow index
     if idx.size(0) > 0:
-        print(f"{label} exceed {threshold}: ", [batch.mp_id[i] for i in idx])
+        warnings.warn(
+            f"{label} exceed {threshold}: ", [batch.mp_id[i] for i in idx]
+        )
 
 
 class BaseModule(pl.LightningModule):
