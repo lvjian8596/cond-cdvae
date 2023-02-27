@@ -209,7 +209,6 @@ class CDVAE(BaseModule):
         :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
         :return: (Tensor) [B x D]
         """
-        logvar = torch.clamp(logvar, None, 4)
         std = torch.exp(0.5 * logvar)
         # assert torch.isfinite(logvar).all()
         # assert torch.isfinite(std).all()
@@ -609,7 +608,8 @@ class CDVAE(BaseModule):
 
         if prefix != 'train':
             # validation/test loss only has coord and type
-            loss = self.hparams.cost_coord * coord_loss
+            # loss = self.hparams.cost_coord * coord_loss
+            # use all weighted loss
 
             # evalute lattice prediction.
             pred_lengths_and_angles = outputs['pred_lengths_and_angles']
