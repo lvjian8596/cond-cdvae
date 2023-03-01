@@ -95,7 +95,7 @@ def detact_overflow(x: torch.Tensor, threshold, batch, label: str):
     idx = torch.nonzero(overflow, as_tuple=True)[0]  # overflow index
     if idx.size(0) > 0:
         warnings.warn(
-            f"{label} exceed {threshold}: ", [batch.mp_id[i] for i in idx]
+            f"{label} exceed {threshold}: {[batch.mp_id[i] for i in idx]}"
         )
 
 
