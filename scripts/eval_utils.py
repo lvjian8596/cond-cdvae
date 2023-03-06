@@ -18,7 +18,8 @@ from torch_geometric.data import DataLoader
 CompScaler = StandardScaler(
     means=np.array(CompScalerMeans),
     stds=np.array(CompScalerStds),
-    replace_nan_token=0.)
+    replace_nan_token=0.0,
+)
 
 
 def load_data(file_path):
@@ -37,8 +38,8 @@ def load_data(file_path):
 
 def get_model_path(eval_model_name):
     import cdvae
-    model_path = (
-        Path(cdvae.__file__).parent / 'prop_models' / eval_model_name)
+
+    model_path = Path(cdvae.__file__).parent / 'prop_models' / eval_model_name
     return model_path
 
 
@@ -61,7 +62,11 @@ def load_model(model_path, load_data=False, testing=True):
         ckpts = list(model_path.glob('*.ckpt'))
         if len(ckpts) > 0:
             ckpt_epochs = np.array(
-                [int(ckpt.parts[-1].split('-')[0].split('=')[1]) for ckpt in ckpts])
+                [
+                    int(ckpt.parts[-1].split('-')[0].split('=')[1])
+                    for ckpt in ckpts
+                ]
+            )
             ckpt = str(ckpts[ckpt_epochs.argsort()[-1]])
         model = model.load_from_checkpoint(ckpt)
         model.lattice_scaler = torch.load(model_path / 'lattice_scaler.pt')
@@ -83,8 +88,7 @@ def load_model(model_path, load_data=False, testing=True):
     return model, test_loader, cfg
 
 
-def get_crystals_list(
-        frac_coords, atom_types, lengths, angles, num_atoms):
+def get_crystals_list(frac_coords, atom_types, lengths, angles, num_atoms):
     """
     args:
         frac_coords: (num_atoms, 3)
@@ -104,19 +108,19 @@ def get_crystals_list(
         cur_lengths = lengths[batch_idx]
         cur_angles = angles[batch_idx]
 
-        crystal_array_list.append({
-            'frac_coords': cur_frac_coords.detach().cpu().numpy(),
-            'atom_types': cur_atom_types.detach().cpu().numpy(),
-            'lengths': cur_lengths.detach().cpu().numpy(),
-            'angles': cur_angles.detach().cpu().numpy(),
-        })
+        crystal_array_list.append(
+            {
+                'frac_coords': cur_frac_coords.detach().cpu().numpy(),
+                'atom_types': cur_atom_types.detach().cpu().numpy(),
+                'lengths': cur_lengths.detach().cpu().numpy(),
+                'angles': cur_angles.detach().cpu().numpy(),
+            }
+        )
         start_idx = start_idx + num_atom
     return crystal_array_list
 
 
-def smact_validity(comp, count,
-                   use_pauling_test=True,
-                   include_alloys=True):
+def smact_validity(comp, count, use_pauling_test=True, include_alloys=True):
     elem_symbols = tuple([chemical_symbols[elem] for elem in comp])
     space = smact.element_dictionary(elem_symbols)
     smact_elems = [e[1] for e in space.items()]
@@ -135,7 +139,8 @@ def smact_validity(comp, count,
         stoichs = [(c,) for c in count]
         # Test for charge balance
         cn_e, cn_r = smact.neutral_ratios(
-            ox_states, stoichs=stoichs, threshold=threshold)
+            ox_states, stoichs=stoichs, threshold=threshold
+        )
         # Electronegativity test
         if cn_e:
             if use_pauling_test:
@@ -148,8 +153,7 @@ def smact_validity(comp, count,
                 electroneg_OK = True
             if electroneg_OK:
                 for ratio in cn_r:
-                    compositions.append(
-                        tuple([elem_symbols, ox_states, ratio]))
+                    compositions.append(tuple([elem_symbols, ox_states, ratio]))
     compositions = [(i[0], i[2]) for i in compositions]
     compositions = list(set(compositions))
     if len(compositions) > 0:
@@ -161,8 +165,7 @@ def smact_validity(comp, count,
 def structure_validity(crystal, cutoff=0.5):
     dist_mat = crystal.distance_matrix
     # Pad diagonal with a large number
-    dist_mat = dist_mat + np.diag(
-        np.ones(dist_mat.shape[0]) * (cutoff + 10.))
+    dist_mat = dist_mat + np.diag(np.ones(dist_mat.shape[0]) * (cutoff + 10.0))
     if dist_mat.min() < cutoff or crystal.volume < 0.1:
         return False
     else:
@@ -184,9 +187,13 @@ def prop_model_eval(eval_model_name, crystal_array_list):
     cfg = load_config(model_path)
 
     dataset = TensorCrystDataset(
-        crystal_array_list, cfg.data.niggli, cfg.data.primitive,
-        cfg.data.graph_method, cfg.data.preprocess_workers,
-        cfg.data.lattice_scale_method)
+        crystal_array_list,
+        cfg.data.niggli,
+        cfg.data.primitive,
+        cfg.data.graph_method,
+        cfg.data.preprocess_workers,
+        cfg.data.lattice_scale_method,
+    )
 
     dataset.scaler = model.scaler.copy()
 
@@ -195,7 +202,8 @@ def prop_model_eval(eval_model_name, crystal_array_list):
         shuffle=False,
         batch_size=256,
         num_workers=0,
-        worker_init_fn=worker_init_fn)
+        worker_init_fn=worker_init_fn,
+    )
 
     model.eval()
 
@@ -223,8 +231,9 @@ def filter_fps(struc_fps, comp_fps):
     return filtered_struc_fps, filtered_comp_fps
 
 
-def compute_cov(crys, gt_crys,
-                struc_cutoff, comp_cutoff, num_gen_crystals=None):
+def compute_cov(
+    crys, gt_crys, struc_cutoff, comp_cutoff, num_gen_crystals=None
+):
     struc_fps = [c.struct_fp for c in crys]
     comp_fps = [c.comp_fp for c in crys]
     gt_struc_fps = [c.struct_fp for c in gt_crys]
@@ -255,12 +264,20 @@ def compute_cov(crys, gt_crys,
     comp_recall_dist = comp_pdist.min(axis=0)
     comp_precision_dist = comp_pdist.min(axis=1)
 
-    cov_recall = np.mean(np.logical_and(
-        struc_recall_dist <= struc_cutoff,
-        comp_recall_dist <= comp_cutoff))
-    cov_precision = np.sum(np.logical_and(
-        struc_precision_dist <= struc_cutoff,
-        comp_precision_dist <= comp_cutoff)) / num_gen_crystals
+    cov_recall = np.mean(
+        np.logical_and(
+            struc_recall_dist <= struc_cutoff, comp_recall_dist <= comp_cutoff
+        )
+    )
+    cov_precision = (
+        np.sum(
+            np.logical_and(
+                struc_precision_dist <= struc_cutoff,
+                comp_precision_dist <= comp_cutoff,
+            )
+        )
+        / num_gen_crystals
+    )
 
     metrics_dict = {
         'cov_recall': cov_recall,

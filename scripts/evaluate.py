@@ -18,8 +18,6 @@ def reconstructon(
     model,
     ld_kwargs,
     num_evals,
-    force_num_atoms=False,
-    force_atom_types=False,
     down_sample_traj_step=1,
 ):
     """
@@ -49,8 +47,8 @@ def reconstructon(
         z = model.comp_cond(z, batch.atom_types, batch.num_atoms)
 
         for eval_idx in range(num_evals):
-            gt_num_atoms = batch.num_atoms if force_num_atoms else None
-            gt_atom_types = batch.atom_types if force_atom_types else None
+            gt_num_atoms = batch.num_atoms
+            gt_atom_types = batch.atom_types
             outputs = model.langevin_dynamics(
                 z, ld_kwargs, gt_num_atoms, gt_atom_types
             )
@@ -132,7 +130,7 @@ def generation(
         chain.from_iterable(
             [elem.number] * int(n)
             for elem, n in Composition(
-                Composition('H2O').get_integer_formula_and_factor()[0]
+                comp.get_integer_formula_and_factor()[0]
             ).items()
         )
     )
@@ -154,7 +152,9 @@ def generation(
         z = model.comp_cond(z, atom_types, num_atoms)
 
         for sample_idx in range(num_samples_per_z):
-            samples = model.langevin_dynamics(z, ld_kwargs)
+            samples = model.langevin_dynamics(
+                z, ld_kwargs, num_atoms, atom_types
+            )
 
             # collect sampled crystals in this batch.
             batch_frac_coords.append(samples['frac_coords'].detach().cpu())
@@ -283,8 +283,6 @@ def main(args):
             model,
             ld_kwargs,
             args.num_evals,
-            args.force_num_atoms,
-            args.force_atom_types,
             args.down_sample_traj_step,
         )
 
@@ -332,7 +330,7 @@ def main(args):
         )
 
         if args.label == '':
-            gen_out_name = 'eval_gen.pt'
+            gen_out_name = f'eval_gen_{args.formula}.pt'
         else:
             gen_out_name = f'eval_gen_{args.label}.pt'
 
