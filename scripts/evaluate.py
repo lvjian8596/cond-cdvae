@@ -1,16 +1,18 @@
-import time
 import argparse
-import torch
-
-from tqdm import tqdm
-from torch.optim import Adam
+import pickle
+import random
+import time
+from collections import Counter
+from itertools import chain
 from pathlib import Path
 from types import SimpleNamespace
-from torch_geometric.data import Batch
-from itertools import chain
-from pymatgen.core.composition import Composition
 
-from eval_utils import load_model
+import torch
+from eval_utils import composition2atom_types, load_model
+from pymatgen.core.composition import Composition
+from torch.optim import Adam
+from torch_geometric.data import Batch
+from tqdm import tqdm
 
 
 def reconstructon(
@@ -110,12 +112,13 @@ def reconstructon(
 
 def generation(
     model,
-    formula,
     ld_kwargs,
     num_batches_to_sample,
     num_samples_per_z,
     batch_size=512,
     down_sample_traj_step=1,
+    formula=None,
+    train_data=None,
 ):
     all_frac_coords_stack = []
     all_atom_types_stack = []
@@ -125,19 +128,44 @@ def generation(
     lengths = []
     angles = []
 
-    comp = Composition(formula)
-    each_atom_types = list(
-        chain.from_iterable(
-            [elem.number] * int(n)
-            for elem, n in Composition(
-                comp.get_integer_formula_and_factor()[0]
-            ).items()
+    if not (formula is None) ^ (train_data is None):
+        raise Exception("formula and train_data should only specify one")
+    elif formula is not None:
+        comp = Composition(formula)
+        specified_atom_types = get_atom_types(comp)
+        sampled_num_atoms = [len(specified_atom_types)] * batch_size  # (B,)
+        sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
+        sampled_atom_types = specified_atom_types * batch_size  # (Nnode,)
+        sampled_atom_types = torch.tensor(
+            sampled_atom_types, device=model.device
         )
-    )
-    num_atoms = [len(each_atom_types)] * batch_size  # (B,)
-    num_atoms = torch.tensor(num_atoms, device=model.device)
-    atom_types = each_atom_types * batch_size  # (Nnode,)
-    atom_types = torch.tensor(atom_types, device=model.device)
+    elif train_data is not None:  # load cached data
+        cached_data = pickle.load(open(train_data, 'rb'))
+
+        def get_atom_types(sample):
+            return sample['graph_arrays'][1]  # [atomic_number list]
+
+        comp_counts = dict(
+            Counter(
+                Composition(dict(Counter(get_atom_types(sample))))
+                for sample in cached_data
+            )
+        )
+        sampled_comps = random.choices(
+            population=list(comp_counts.keys()),
+            weights=list(comp_counts.values()),
+            k=batch_size,
+        )
+        sampled_atom_types = list(
+            chain.from_iterable(
+                composition2atom_types(comp) for comp in sampled_comps
+            )
+        )
+        sampled_num_atoms = [comp.num_atoms for comp in sampled_comps]
+        sampled_atom_types = torch.tensor(
+            sampled_atom_types, device=model.device
+        )
+        sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
 
     for z_idx in range(num_batches_to_sample):
         batch_all_frac_coords = []
@@ -149,11 +177,11 @@ def generation(
             batch_size, model.hparams.hidden_dim, device=model.device
         )
         # cond z
-        z = model.comp_cond(z, atom_types, num_atoms)
+        z = model.comp_cond(z, sampled_atom_types, sampled_num_atoms)
 
         for sample_idx in range(num_samples_per_z):
             samples = model.langevin_dynamics(
-                z, ld_kwargs, num_atoms, atom_types
+                z, ld_kwargs, sampled_num_atoms, sampled_atom_types
             )
 
             # collect sampled crystals in this batch.
@@ -321,16 +349,17 @@ def main(args):
             all_atom_types_stack,
         ) = generation(
             model,
-            args.formula,
             ld_kwargs,
             args.num_batches_to_samples,
             args.num_evals,
             args.batch_size,
             args.down_sample_traj_step,
+            args.formula,
+            args.train_data,
         )
 
         if args.label == '':
-            gen_out_name = f'eval_gen_{args.formula}.pt'
+            gen_out_name = f'eval_gen.pt'
         else:
             gen_out_name = f'eval_gen_{args.label}.pt'
 
@@ -386,7 +415,10 @@ if __name__ == '__main__':
     parser.add_argument('--force_atom_types', action='store_true')
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
-    parser.add_argument('--formula')
+    parser.add_argument('--formula', help="formula to generate")
+    parser.add_argument(
+        '--train_data', help="training cached_data(pkl) for sample composition"
+    )
 
     args = parser.parse_args()
 

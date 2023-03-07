@@ -1,19 +1,22 @@
 import itertools
+from itertools import chain
 from pathlib import Path
 
 import hydra
 import numpy as np
 import smact
 import torch
+from hydra import initialize_config_dir
+from hydra.experimental import compose
+from pymatgen.core.composition import Composition
+from scipy.spatial.distance import cdist, pdist
+from smact.screening import pauling_test
+from torch_geometric.data import DataLoader
+
 from cdvae.common.constants import CompScalerMeans, CompScalerStds
 from cdvae.common.data_utils import StandardScaler, chemical_symbols
 from cdvae.pl_data.datamodule import worker_init_fn
 from cdvae.pl_data.dataset import TensorCrystDataset
-from hydra import initialize_config_dir
-from hydra.experimental import compose
-from scipy.spatial.distance import cdist, pdist
-from smact.screening import pauling_test
-from torch_geometric.data import DataLoader
 
 CompScaler = StandardScaler(
     means=np.array(CompScalerMeans),
@@ -296,3 +299,12 @@ def compute_cov(
     }
 
     return metrics_dict, combined_dist_dict
+
+
+# Composition('H2O') -> [1, 1, 8]
+def composition2atom_types(composition: Composition):
+    return list(
+        chain.from_iterable(
+            [elem.number] * int(n) for elem, n in composition.items()
+        )
+    )
