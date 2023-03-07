@@ -1,4 +1,4 @@
-root_path: ${oc.env:PROJECT_ROOT}/data/mp_20
+root_path: ${oc.env:PROJECT_ROOT}/data/mp_20_old
 prop: formation_energy_per_atom
 num_targets: 1
 # prop: scaled_lattice
@@ -9,7 +9,7 @@ graph_method: crystalnn
 lattice_scale_method: scale_length
 preprocess_workers: 30
 readout: mean
-max_atoms: 20
+# max_atoms: 20
 otf_graph: false
 eval_model_name: mp20
 
