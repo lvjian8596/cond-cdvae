@@ -73,7 +73,6 @@ def load_model(model_path, load_data=False, testing=True):
             ckpt = str(ckpts[ckpt_epochs.argsort()[-1]])
         model = model.load_from_checkpoint(ckpt)
         model.lattice_scaler = torch.load(model_path / 'lattice_scaler.pt')
-        model.scaler = torch.load(model_path / 'prop_scaler.pt')
 
         if load_data:
             datamodule = hydra.utils.instantiate(

@@ -25,7 +25,7 @@ class CrystDataset(Dataset):
         path: ValueNode,  # original crystal info
         save_path: ValueNode,  # processed graph data
         force_process: ValueNode,  # process or load
-        prop: ValueNode,
+        prop: ValueNode,  # list
         niggli: ValueNode,
         primitive: ValueNode,
         graph_method: ValueNode,
@@ -51,7 +51,7 @@ class CrystDataset(Dataset):
                 niggli=self.niggli,
                 primitive=self.primitive,
                 graph_method=self.graph_method,
-                prop_list=[prop],
+                prop_list=prop,
             )
             print(f"Dump into {self.save_path} ...")
             pickle.dump(self.cached_data, open(self.save_path, 'wb'))
@@ -68,11 +68,9 @@ class CrystDataset(Dataset):
 
     def __getitem__(self, index) -> Data:
         data_dict = self.cached_data[index]
+        # {'mp_id', 'cif', 'graph_array' **prop}
 
         # scaler is set in DataModule set stage
-        # if (self.lattice_scaler is None) or (self.scaler is None):
-        #     raise ValueError("Scaler should be set before used")
-        prop = self.scaler.transform(torch.tensor(data_dict[self.prop]))
         (
             frac_coords,
             atom_types,
@@ -97,8 +95,11 @@ class CrystDataset(Dataset):
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
             num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
-            y=prop.view(1, -1),
             mp_id=data_dict['mp_id'],
+            **{
+                p: torch.tensor(data_dict[p]).float().view(1, -1)
+                for p in self.prop
+            },
         )
         return data
 
