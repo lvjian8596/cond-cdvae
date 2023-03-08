@@ -25,3 +25,29 @@ predict_property: False
 defaults:
   - encoder: dimenet
   - decoder: gemnet
+
+conditions:
+  _target_: cdvae.pl_modules.conditioning.MultiEmbedding
+  cond_names: ${data.conditions}
+  hidden_dim: 128
+  fc_num_layers: 3
+  out_dim: 128
+
+  types:
+    composition:
+      _target_: cdvae.pl_modules.conditioning.CompositionEmbedding
+      n_out: ${model.encoder.hidden_channels}
+      reduce: sum
+
+    energy_per_atom:
+      _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
+      prop_name: energy_per_atom
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
+      batch_norm: true
+      n_basis: 50
+      start: -2
+      stop: 2
+      trainable_gaussians: false
+      no_expansion: false
