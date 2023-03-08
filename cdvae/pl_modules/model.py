@@ -11,32 +11,17 @@ from torch.nn import functional as F
 from torch_scatter import scatter
 from tqdm import tqdm
 
-from cdvae.common.data_utils import (
-    EPSILON,
-    cart_to_frac_coords,
-    frac_to_cart_coords,
-    lengths_angles_to_volume,
-    mard,
-    min_distance_sqr_pbc,
-    StandardScalerTorch,
-)
+from cdvae.common.data_utils import (EPSILON, StandardScalerTorch,
+                                     cart_to_frac_coords, frac_to_cart_coords,
+                                     lengths_angles_to_volume, mard,
+                                     min_distance_sqr_pbc)
 from cdvae.common.utils import PROJECT_ROOT
+from cdvae.pl_modules.basic_blocks import build_mlp
+from cdvae.pl_modules.conditioning import (BiasConditioning,
+                                           ConcatConditioning, FiLM,
+                                           ScaleConditioning)
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
-from cdvae.pl_modules.conditioning import (
-    ConcatConditioning,
-    BiasConditioning,
-    ScaleConditioning,
-    FiLM,
-)
-
-
-def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim):
-    mods = [nn.Linear(in_dim, hidden_dim), nn.ReLU()]
-    for i in range(fc_num_layers - 1):
-        mods += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
-    mods += [nn.Linear(hidden_dim, out_dim)]
-    return nn.Sequential(*mods)
 
 
 class CompositionCondition(nn.Module):
@@ -678,8 +663,9 @@ def main(cfg: omegaconf.DictConfig):
             z = returns['z']
             print(idx, z.shape, z.max().item())
     # Debug sample
-    from pymatgen.core.composition import Composition
     from itertools import chain
+
+    from pymatgen.core.composition import Composition
 
     comp = Composition('H2O')
     n_sample = 10
