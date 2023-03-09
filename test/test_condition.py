@@ -24,10 +24,15 @@ def main(cfg: omegaconf.DictConfig):
     nnodes = batch.batch.shape[0]
     cond_dim = cfg.model.conditions.cond_dim
 
+    conditions = {
+        'composition': (batch.atom_types, batch.num_atoms),
+        'energy_per_atom': batch.energy_per_atom,
+    }
+
     multiemb: MultiEmbedding = hydra.utils.instantiate(
         cfg.model.conditions, _recursive_=False
     )
-    cond = multiemb(batch)  # z(B, cond_dim)
+    cond = multiemb(conditions)  # z(B, cond_dim)
     print(cond.shape)
     assert cond.shape == (B, cond_dim)
 

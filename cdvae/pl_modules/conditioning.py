@@ -22,9 +22,11 @@ class CompositionEmbedding(SubEmbedding):
         self.reduce = reduce
         self.emb = AtomEmbedding(n_out)
 
-    def forward(self, batch):
-        atom_emb = self.emb(batch.atom_types)
-        comp_emb = scatter(atom_emb, batch.batch, dim=0, reduce=self.reduce)
+    def forward(self, prop):
+        atom_types, num_atoms = prop
+        batch = torch.arange(len(num_atoms)).repeat_interleave(num_atoms)
+        atom_emb = self.emb(atom_types)
+        comp_emb = scatter(atom_emb, batch, dim=0, reduce=self.reduce)
         return comp_emb
 
 
@@ -61,8 +63,7 @@ class ScalarEmbedding(SubEmbedding):
             self.expansion_net = None
             self.mlp = build_mlp(1, hidden_dim, fc_num_layers, n_out)
 
-    def forward(self, batch):
-        prop = batch[self.prop_name]
+    def forward(self, prop):
         if self.bn is not None:
             prop = self.bn(prop)
         if self.expansion_net is not None:
@@ -145,7 +146,7 @@ class MultiEmbedding(nn.Module):
 
     def __init__(
         self,
-        cond_names: list,
+        cond_keys: list,
         hidden_dim: int,
         fc_num_layers: int,
         cond_dim: int,
@@ -154,27 +155,28 @@ class MultiEmbedding(nn.Module):
         """Concatenate multi-embedding vector
 
         Args:
-            cond_names (list): list of condition name strings
+            cond_keys (list): list of condition name strings
             hidden_dim (int): hidden dimensions of out MLP
             fc_num_layers (int): number of layers of out MLP
             out_dim (int): out dimension of MLP
             types (dict or dict-like): kwargs of sub-embedding modules
         """
         super().__init__()
-        self.cond_names = cond_names
+        self.cond_keys = cond_keys
 
         n_in = 0
         self.sub_emb_list = []
-        for cond_name in cond_names:
-            sub_emb = hydra.utils.instantiate(types[cond_name])
+        for cond_key in cond_keys:
+            sub_emb = hydra.utils.instantiate(types[cond_key])
             self.sub_emb_list.append(sub_emb)
             n_in += sub_emb.n_out
         self.cond_mlp = build_mlp(n_in, hidden_dim, fc_num_layers, cond_dim)
 
-    def forward(self, batch):
+    def forward(self, conditions: dict):
+        # conditions={'composition': (atom_types, num_atoms), 'cond_name': cond_vals}
         cond_vecs = []
-        for cond_name, sub_emb in zip(self.cond_names, self.sub_emb_list):
-            cond_vec = sub_emb(batch)
+        for cond_key, sub_emb in zip(self.cond_keys, self.sub_emb_list):
+            cond_vec = sub_emb(conditions[cond_key])
             cond_vecs += [cond_vec]
 
         cond_vecs = torch.cat(cond_vecs, dim=-1)
