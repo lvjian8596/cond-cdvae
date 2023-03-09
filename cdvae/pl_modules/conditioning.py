@@ -133,22 +133,26 @@ class GaussianExpansion(nn.Module):
 
 
 class MultiEmbedding(nn.Module):
-    """
-    feat1 -> sub_layer1 \
-                        concat -> MLP -> out
-    feat2 -> sub_layer2 /
-
+    """Concatenate multi-embedding vector
     all sublayer should have a attribute named 'n_out'
+
+        feat1 -> sub_layer1 \
+                            concat -> MLP -> out
+        feat2 -> sub_layer2 /
+
+    Returns: z(B, out_dim)
     """
 
-    def __init__(
-        self,
-        cond_names,
-        hidden_dim,  # out MLP
-        fc_num_layers: int,  # out MLP
-        out_dim: int,  # out MLP
-        types,  # kwargs of sub-embedding models
-    ):
+    def __init__(self, cond_names, hidden_dim, fc_num_layers, out_dim, types):
+        """Concatenate multi-embedding vector
+
+        Args:
+            cond_names (list): list of condition name strings
+            hidden_dim (int): hidden dimensions of out MLP
+            fc_num_layers (int): number of layers of out MLP
+            out_dim (int): out dimension of MLP
+            types (dict or dict-like): kwargs of sub-embedding modules
+        """
         super().__init__()
         self.cond_names = cond_names
 
@@ -171,17 +175,65 @@ class MultiEmbedding(nn.Module):
         return cond_vec
 
 
+class AtomwiseConditioning(nn.Module):
+    def __init__(self, cond_dim, atom_emb_size, mode: str = 'concat'):
+        """Aggregate condition vector c with atomtype embedding vector
+
+        Args:
+            cond_dim (int): Dimension of condition vector
+            atom_emb_size (int): Dimension of atom type embedding
+            mode (str, optional): Aggregate mode. Defaults to 'concat'.
+        """
+        super().__init__()
+        self.atom_emb = AtomEmbedding(atom_emb_size)
+        self.agg = AggregateConditioning(cond_dim, atom_emb_size, mode)
+
+    def forward(self, c, atom_types, num_atoms):
+        atom_emb = self.atom_emb(atom_types)
+        c_per_atom = c.repeat_interleave(num_atoms, dim=0)
+        emb = self.agg(c_per_atom, atom_emb)
+        return emb
+
+
+class AggregateConditioning(nn.Module):
+    def __init__(self, cond_dim: int, emb_dim: int, mode: str = 'concat'):
+        """Aggregate condition vector c with embedding vector z, output z',
+        always output the same dimension as embedding vector z
+
+        Args:
+            cond_dim (int): Dimension of condition vector
+            emb_dim (int): Dimension of input embedding vector's dim
+            mode (str, optional): Aggregate mode. ['concatenate', 'bias',
+            'scale', 'film'] Defaults to 'concat'.
+        """
+        super().__init__()
+        if mode.startswith('concat') or mode.startswith('cat'):
+            self.cond_model = ConcatConditioning(emb_dim, cond_dim)
+        elif mode.startswith('bias'):
+            self.cond_model = BiasConditioning(emb_dim, cond_dim)
+        elif mode.startswith('scal'):
+            self.cond_model = ScaleConditioning(emb_dim, cond_dim)
+        elif mode.startswith('film'):
+            self.cond_model = FiLM(emb_dim, cond_dim)
+        else:
+            raise ValueError("Unknown mode")
+
+    def forward(self, c, z):  # return cond_z
+        z = self.cond_model(z, c)
+        return z
+
+
 class ConcatConditioning(nn.Module):
     """z = Lin(cat[x, y])"""
 
-    def __init__(self, xdim, ydim, zdim):
+    def __init__(self, xdim, ydim, zdim=None):
         super(ConcatConditioning, self).__init__()
 
         self.xdim = xdim
         self.ydim = ydim
-        self.zdim = zdim
+        self.zdim = zdim if zdim is not None else xdim
 
-        self.linear = nn.Linear(xdim + ydim, zdim)
+        self.linear = nn.Linear(self.xdim + self.ydim, self.zdim)
 
     def forward(self, x, y):
         assert x.size(1) == self.xdim
