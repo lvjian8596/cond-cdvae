@@ -2,6 +2,7 @@
 DimeNet++
 """
 import warnings
+from math import sqrt
 
 import hydra
 import omegaconf
@@ -12,7 +13,6 @@ from torch_geometric.nn.acts import swish
 from torch_geometric.nn.inits import glorot_orthogonal
 from torch_geometric.nn.models.dimenet import (
     BesselBasisLayer,
-    EmbeddingBlock,
     ResidualLayer,
     SphericalBasisLayer,
 )
@@ -25,12 +25,42 @@ from cdvae.common.data_utils import (
     radius_graph_pbc_wrapper,
 )
 from cdvae.common.utils import PROJECT_ROOT
+from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.gemnet import GemNetT
+from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
 
 try:
     import sympy as sym
 except ImportError:
     sym = None
+
+
+class EmbeddingBlock(nn.Module):
+    """Modified EmbeddingBlock
+
+    concatenate condition vector z with [xi, xj, rbf]
+    """
+    def __init__(self, num_radial, hidden_channels, act=swish):
+        super().__init__()
+        self.hidden_channels = hidden_channels
+        self.act = act
+
+        self.emb = AtomEmbedding(MAX_ATOMIC_NUM, hidden_channels)
+        self.lin_rbf = nn.Linear(num_radial, hidden_channels)
+        self.lin = nn.Linear(4 * hidden_channels, hidden_channels)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.emb.weight.data.uniform_(-sqrt(3), sqrt(3))
+        self.lin_rbf.reset_parameters()
+        self.lin.reset_parameters()
+
+    def forward(self, x, rbf, i, j, cond_z):
+        assert x.shape[1] == cond_z.shape[1] == self.hidden_channels
+        x = self.emb(x)
+        rbf = self.act(self.lin_rbf(rbf))
+        return self.act(self.lin(torch.cat([x[i], x[j], rbf, cond_z], dim=-1)))
 
 
 class InteractionPPBlock(torch.nn.Module):
@@ -344,7 +374,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
             num_output_layers=num_output_layers,
         )
 
-    def forward(self, data):
+    def forward(self, data, cond_z):
         batch = data.batch
 
         if self.otf_graph:  # compute new graph data
@@ -396,7 +426,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         sbf = self.sbf(dist, angle, idx_kj)
 
         # Embedding block.
-        x = self.emb(data.atom_types.long(), rbf, i, j)
+        x = self.emb(data.atom_types.long(), rbf, i, j, cond_z)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 
         # Interaction blocks.
