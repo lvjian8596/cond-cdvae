@@ -2,8 +2,8 @@
 import hydra
 import torch
 import torch.nn as nn
-
 from torch_scatter import scatter
+
 from cdvae.pl_modules.basic_blocks import build_mlp
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
@@ -143,7 +143,14 @@ class MultiEmbedding(nn.Module):
     Returns: z(B, out_dim)
     """
 
-    def __init__(self, cond_names, hidden_dim, fc_num_layers, out_dim, types):
+    def __init__(
+        self,
+        cond_names: list,
+        hidden_dim: int,
+        fc_num_layers: int,
+        cond_dim: int,
+        types: dict,
+    ):
         """Concatenate multi-embedding vector
 
         Args:
@@ -162,7 +169,7 @@ class MultiEmbedding(nn.Module):
             sub_emb = hydra.utils.instantiate(types[cond_name])
             self.sub_emb_list.append(sub_emb)
             n_in += sub_emb.n_out
-        self.cond_mlp = build_mlp(n_in, hidden_dim, fc_num_layers, out_dim)
+        self.cond_mlp = build_mlp(n_in, hidden_dim, fc_num_layers, cond_dim)
 
     def forward(self, batch):
         cond_vecs = []

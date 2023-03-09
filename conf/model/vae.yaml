@@ -2,7 +2,6 @@ _target_: cdvae.pl_modules.model.CDVAE
 hidden_dim: 256
 latent_dim: 256
 fc_num_layers: 1
-condition_mode: concat
 cost_natom: 1.
 cost_coord: 10.
 cost_type: 1.
@@ -31,7 +30,7 @@ conditions:
   cond_names: ${data.conditions}
   hidden_dim: 128
   fc_num_layers: 3
-  out_dim: 128
+  cond_dim: 128
 
   types:
     composition:
