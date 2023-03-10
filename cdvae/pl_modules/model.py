@@ -11,62 +11,19 @@ from torch.nn import functional as F
 from torch_scatter import scatter
 from tqdm import tqdm
 
-from cdvae.common.data_utils import (EPSILON, StandardScalerTorch,
-                                     cart_to_frac_coords, frac_to_cart_coords,
-                                     lengths_angles_to_volume, mard,
-                                     min_distance_sqr_pbc)
+from cdvae.common.data_utils import (
+    EPSILON,
+    StandardScalerTorch,
+    cart_to_frac_coords,
+    frac_to_cart_coords,
+    lengths_angles_to_volume,
+    mard,
+    min_distance_sqr_pbc,
+)
 from cdvae.common.utils import PROJECT_ROOT
 from cdvae.pl_modules.basic_blocks import build_mlp
-from cdvae.pl_modules.conditioning import (BiasConditioning,
-                                           ConcatConditioning, FiLM,
-                                           ScaleConditioning)
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
-from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
-
-
-class CompositionCondition(nn.Module):
-    """z on condition of (c, N)
-    z:                        (Batch, lattent_dim)
-    c: atom_types, each atom  (Nnode,)
-    N: num_atoms, each sample (Batch,)
-
-    condition: Lin(Agg(emb(c), N))) -> composition embedding of each sample
-
-    c -> Emb(c)              (Nnode, emb_size_atom)  atom embedding
-    Emb(c) -> Agg(Emb(c))    (Batch, emb_size_atom)  sample embedding
-
-    1. Concatenate 2. Bias 3. Scale 4. FiLM
-    """
-
-    def __init__(self, emb_size_atom, latent_dim, mode='concatenate') -> None:
-        super().__init__()
-        self.mode = mode
-        self.atom_emb = AtomEmbedding(emb_size_atom)
-
-        if self.mode.startswith('concat') or self.mode.startswith('cat'):
-            self.cond_model = ConcatConditioning(
-                latent_dim, emb_size_atom, latent_dim
-            )
-        elif self.mode.startswith('bias'):
-            self.cond_model = BiasConditioning(latent_dim, emb_size_atom)
-        elif self.mode.startswith('scal'):
-            self.cond_model = ScaleConditioning(latent_dim, emb_size_atom)
-        elif self.mode.startswith('film'):
-            self.cond_model = FiLM(latent_dim, emb_size_atom)
-        else:
-            raise ValueError("Unknown mode")
-
-    def forward(self, z, atom_types, num_atoms):  # return cond_z
-        batch = torch.arange(
-            len(num_atoms), device=num_atoms.device
-        ).repeat_interleave(num_atoms)
-        # (Nnode, emb)
-        atom_emb = self.atom_emb(atom_types)
-        # aggregate  (Batch, emb)
-        sample_emb = scatter(atom_emb, batch, dim=0, reduce='mean')
-
-        z = self.cond_model(z, sample_emb)
-        return z
+from cdvae.pl_modules.conditioning import AggregateConditioning, MultiEmbedding
 
 
 def detact_overflow(x: torch.Tensor, threshold, batch, label: str):
@@ -131,10 +88,11 @@ class CDVAE(BaseModule):
         )
         self.decoder = hydra.utils.instantiate(self.hparams.decoder)
 
-        self.comp_cond = CompositionCondition(
-            self.hparams.hidden_dim,
-            self.hparams.latent_dim,
-            self.hparams.condition_mode,
+        self.multiemb: MultiEmbedding = hydra.utils.instantiate(
+            self.conditions, _recursive_=False
+        )
+        self.agg_cond = AggregateConditioning(
+            self.hparams.conditions.cond_dim, self.hparms.latent_dim
         )
 
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
@@ -187,7 +145,15 @@ class CDVAE(BaseModule):
         self.lattice_scaler = StandardScalerTorch(
             torch.tensor(0), torch.tensor(1)
         )
-        self.scaler = StandardScalerTorch(torch.tensor(0), torch.tensor(1))
+
+    def build_conditions(self, batch):
+        conditions = {}
+        for cond_key in self.hparams.conditions.cond_keys:
+            if cond_key == 'composition':
+                conditions[cond_key] = (batch.atom_types, batch.num_atoms)
+            else:
+                conditions[cond_key] = batch[cond_key]
+        return conditions
 
     def reparameterize(self, mu, logvar):
         """
@@ -203,11 +169,11 @@ class CDVAE(BaseModule):
         eps = torch.randn_like(std)
         return eps * std + mu
 
-    def encode(self, batch):
+    def encode(self, batch, cond_vec):
         """
         encode crystal structures to latents.
         """
-        hidden = self.encoder(batch)
+        hidden = self.encoder(batch, cond_vec)
 
         # debug
         detact_overflow(hidden, 100, batch, "hidden")
@@ -358,24 +324,30 @@ class CDVAE(BaseModule):
 
         return output_dict
 
-    def sample(self, gt_num_atoms, gt_atom_types, num_samples, ld_kwargs):
+    def sample(
+        self, conditions, gt_num_atoms, gt_atom_types, num_samples, ld_kwargs
+    ):
         z = torch.randn(
             num_samples, self.hparams.hidden_dim, device=self.device
         )
         # cond z
-        z = self.comp_cond(z, gt_atom_types, gt_num_atoms)
+        cond_vec = self.multiemb(conditions)
+        cond_z = self.agg_cond(cond_vec, z)
         samples = self.langevin_dynamics(
-            z, ld_kwargs, gt_num_atoms, gt_atom_types
+            cond_z, ld_kwargs, gt_num_atoms, gt_atom_types
         )
         return samples
 
     def forward(self, batch, teacher_forcing=False, training=True):
-        # hacky way to resolve the NaN issue. Will need more careful debugging later.
-        mu, log_var, z = self.encode(batch)
-        # z (B, lattent_dim)
-
         # conditional z
-        cond_z = self.comp_cond(z, batch.atom_types, batch.num_atoms)
+        conditions = self.build_conditions(batch)
+        cond_vec = self.multiemb(conditions)
+
+        # hacky way to resolve the NaN issue. Will need more careful debugging later.
+        mu, log_var, z = self.encode(batch, cond_vec)
+
+        # z (B, lattent_dim)
+        cond_z = self.agg_cond(cond_vec, z)
 
         # pred lattice from cond_z
         (
@@ -418,7 +390,7 @@ class CDVAE(BaseModule):
         )
 
         pred_cart_coord_diff, _ = self.decoder(
-            z,
+            cond_z,
             noisy_frac_coords,
             batch.atom_types,
             batch.num_atoms,
@@ -434,16 +406,10 @@ class CDVAE(BaseModule):
 
         kld_loss = self.kld_loss(mu, log_var)
 
-        if self.hparams.predict_property:
-            property_loss = self.property_loss(z, batch)
-        else:
-            property_loss = 0.0
-
         return {
             'lattice_loss': lattice_loss,
             'coord_loss': coord_loss,
             'kld_loss': kld_loss,
-            'property_loss': property_loss,
             'pred_lengths_and_angles': pred_lengths_and_angles,
             'pred_lengths': pred_lengths,
             'pred_angles': pred_angles,
@@ -453,10 +419,6 @@ class CDVAE(BaseModule):
             'rand_frac_coords': noisy_frac_coords,
             'z': z,
         }
-
-    def predict_property(self, z):
-        self.scaler.match_device(z)
-        return self.scaler.inverse_transform(self.fc_property(z))
 
     def predict_lattice(self, z, num_atoms):
         self.lattice_scaler.match_device(z)
@@ -640,9 +602,9 @@ def main(cfg: omegaconf.DictConfig):
     batch = next(iter(datamodule.train_dataloader()))
     print(batch)
     # =========================================
-    comp_cond = CompositionCondition(cfg.model.hidden_dim, cfg.model.latent_dim)
+    # !!! comp_cond = CompositionCondition(cfg.model.hidden_dim, cfg.model.latent_dim)
     z = torch.zeros((batch.num_graphs, cfg.model.latent_dim))
-    print(comp_cond(z, batch.atom_types, batch.num_atoms).shape)
+    # !!! print(comp_cond(z, batch.atom_types, batch.num_atoms).shape)
     cdvae = hydra.utils.instantiate(
         cfg.model,
         optim=cfg.optim,
@@ -651,7 +613,6 @@ def main(cfg: omegaconf.DictConfig):
         _recursive_=False,
     )
     cdvae.lattice_scaler = datamodule.lattice_scaler.copy()
-    cdvae.scaler = datamodule.scaler.copy()
     # -----------------
     # trainer = pl.Trainer(fast_dev_run=True)
     # trainer.fit(model=cdvae, datamodule=datamodule)

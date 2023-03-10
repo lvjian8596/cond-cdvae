@@ -53,10 +53,10 @@ class CrystDataset(Dataset):
                 graph_method=self.graph_method,
                 prop_list=prop,
             )
-            print(f"Dump into {self.save_path} ...")
+            hydra.utils.log.info(f"Dump into {self.save_path} ...")
             pickle.dump(self.cached_data, open(self.save_path, 'wb'))
         else:
-            print(f"Load from {self.save_path} ...")
+            hydra.utils.log.info(f"Load from {self.save_path} ...")
             self.cached_data = pickle.load(open(self.save_path, 'rb'))
 
         add_scaled_lattice_prop(self.cached_data, lattice_scale_method)
