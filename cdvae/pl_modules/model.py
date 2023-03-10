@@ -83,16 +83,20 @@ class CDVAE(BaseModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
+        hydra.utils.log.info("Initializing encoder ...")
         self.encoder = hydra.utils.instantiate(
             self.hparams.encoder, num_targets=self.hparams.latent_dim
         )
+        hydra.utils.log.info("Initializing encoder done")
+        hydra.utils.log.info("Initializing decoder ...")
         self.decoder = hydra.utils.instantiate(self.hparams.decoder)
+        hydra.utils.log.info("Initializing decoder done")
 
         self.multiemb: MultiEmbedding = hydra.utils.instantiate(
-            self.conditions, _recursive_=False
+            self.hparams.conditions, _recursive_=False
         )
         self.agg_cond = AggregateConditioning(
-            self.hparams.conditions.cond_dim, self.hparms.latent_dim
+            self.hparams.conditions.cond_dim, self.hparams.latent_dim
         )
 
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
@@ -218,7 +222,7 @@ class CDVAE(BaseModule):
         )
 
     @torch.no_grad()
-    def langevin_dynamics(self, z, ld_kwargs, gt_num_atoms, gt_atom_types):
+    def langevin_dynamics(self, cond_z, ld_kwargs, gt_num_atoms, gt_atom_types):
         """
         decode crystral structure from latent embeddings.
         ld_kwargs: args for doing annealed langevin dynamics sampling:
@@ -237,7 +241,7 @@ class CDVAE(BaseModule):
             all_atom_types = []
 
         # obtain key stats.
-        _, lengths, angles = self.decode_stats(z, gt_num_atoms)
+        _, lengths, angles = self.decode_stats(cond_z, gt_num_atoms)
         if gt_num_atoms is not None:
             num_atoms = gt_num_atoms
 
@@ -252,7 +256,7 @@ class CDVAE(BaseModule):
         cur_atom_types = gt_atom_types
 
         # init coords.
-        cur_frac_coords = torch.rand((num_atoms.sum(), 3), device=z.device)
+        cur_frac_coords = torch.rand((num_atoms.sum(), 3), device=cond_z.device)
 
         # annealed langevin dynamics.
         for sigma in tqdm(
@@ -269,7 +273,7 @@ class CDVAE(BaseModule):
                     step_size * 2
                 )
                 pred_cart_coord_diff, pred_atom_types = self.decoder(
-                    z,
+                    cond_z,
                     cur_frac_coords,
                     cur_atom_types,
                     num_atoms,
@@ -324,9 +328,18 @@ class CDVAE(BaseModule):
 
         return output_dict
 
-    def sample(
-        self, conditions, gt_num_atoms, gt_atom_types, num_samples, ld_kwargs
-    ):
+    def sample(self, conditions, ld_kwargs):
+        """sample
+
+        Args:
+            conditions (dict): {'composition': (atom_types, num_atoms), cond_key: cond_val, ...}
+            ld_kwargs (dict): langevin-dynamics args dict
+
+        Returns:
+            dict: arrays of all generated samples
+        """
+        gt_atom_types, gt_num_atoms = conditions['composition']
+        num_samples = gt_num_atoms.shape[0]
         z = torch.randn(
             num_samples, self.hparams.hidden_dim, device=self.device
         )
@@ -350,11 +363,8 @@ class CDVAE(BaseModule):
         cond_z = self.agg_cond(cond_vec, z)
 
         # pred lattice from cond_z
-        (
-            pred_lengths_and_angles,  # (B, 6)
-            pred_lengths,  # (B, 3)
-            pred_angles,  # (B, 3)
-        ) = self.decode_stats(
+        # (B, 6)                 (B, 3)        (B, 3)
+        pred_lengths_and_angles, pred_lengths, pred_angles = self.decode_stats(
             cond_z,
             batch.num_atoms,
             batch.lengths,
