@@ -252,11 +252,9 @@ class DimeNetPlusPlus(torch.nn.Module):
         self.num_blocks = num_blocks
 
         self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)
-        hydra.utils.log.info("Initializing SphericalBasisLayer ...")
         self.sbf = SphericalBasisLayer(  # require a lot of init time
             num_spherical, num_radial, cutoff, envelope_exponent
         )
-        hydra.utils.log.info("done")
 
         self.atomwisecond = AtomwiseConditioning(cond_dim, hidden_channels)
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
@@ -429,7 +427,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
 
         # Embedding block.
         x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
-        x = self.emb(x, rbf, i, j, cond_vec)
+        x = self.emb(x, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 
         # Interaction blocks.
