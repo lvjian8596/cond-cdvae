@@ -15,7 +15,7 @@ from torch_geometric.data import Batch
 from tqdm import tqdm
 
 
-def reconstructon(
+def reconstruction(
     loader,
     model,
     ld_kwargs,
@@ -44,15 +44,17 @@ def reconstructon(
         batch_lengths, batch_angles = [], []
 
         # only sample one z, multiple evals for stoichaticity in langevin dynamics
-        _, _, z = model.encode(batch)
+        conditions = model.build_conditions(batch)
+        cond_vec = model.multiemb(conditions)
+        _, _, z = model.encode(batch, cond_vec)
         # conditional z
-        z = model.comp_cond(z, batch.atom_types, batch.num_atoms)
+        cond_z = model.agg_cond(cond_vec, z)
 
         for eval_idx in range(num_evals):
             gt_num_atoms = batch.num_atoms
             gt_atom_types = batch.atom_types
             outputs = model.langevin_dynamics(
-                z, ld_kwargs, gt_num_atoms, gt_atom_types
+                cond_z, ld_kwargs, gt_num_atoms, gt_atom_types
             )
 
             # collect sampled crystals in this batch.
@@ -177,6 +179,7 @@ def generation(
             batch_size, model.hparams.hidden_dim, device=model.device
         )
         # cond z
+        # !!!
         z = model.comp_cond(z, sampled_atom_types, sampled_num_atoms)
 
         for sample_idx in range(num_samples_per_z):
@@ -306,7 +309,7 @@ def main(args):
             all_frac_coords_stack,
             all_atom_types_stack,
             input_data_batch,
-        ) = reconstructon(
+        ) = reconstruction(
             test_loader,
             model,
             ld_kwargs,
