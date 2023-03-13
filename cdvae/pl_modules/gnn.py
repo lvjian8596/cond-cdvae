@@ -9,7 +9,6 @@ import omegaconf
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from torch_geometric.nn.acts import swish
 from torch_geometric.nn.inits import glorot_orthogonal
 from torch_geometric.nn.models.dimenet import (
     BesselBasisLayer,
@@ -25,10 +24,10 @@ from cdvae.common.data_utils import (
     radius_graph_pbc_wrapper,
 )
 from cdvae.common.utils import PROJECT_ROOT
+from cdvae.pl_modules.conditioning import AtomwiseConditioning
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.gemnet import GemNetT
 from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
-from cdvae.pl_modules.conditioning import AtomwiseConditioning
 
 try:
     import sympy as sym
@@ -41,7 +40,8 @@ class EmbeddingBlock(nn.Module):
 
     concatenate [xi, xj, rbf]
     """
-    def __init__(self, num_radial, hidden_channels, act=swish):
+
+    def __init__(self, num_radial, hidden_channels, act=nn.SiLU()):
         super().__init__()
         self.hidden_channels = hidden_channels
         self.act = act
@@ -70,7 +70,7 @@ class InteractionPPBlock(torch.nn.Module):
         num_radial,
         num_before_skip,
         num_after_skip,
-        act=swish,
+        act=nn.SiLU(),
     ):
         super(InteractionPPBlock, self).__init__()
         self.act = act
@@ -166,7 +166,7 @@ class OutputPPBlock(torch.nn.Module):
         out_emb_channels,
         out_channels,
         num_layers,
-        act=swish,
+        act=nn.SiLU(),
     ):
         super(OutputPPBlock, self).__init__()
         self.act = act
@@ -219,7 +219,7 @@ class DimeNetPlusPlus(torch.nn.Module):
         num_output_layers: (int, optional): Number of linear layers for the
             output blocks. (default: :obj:`3`)
         act: (function, optional): The activation funtion.
-            (default: :obj:`swish`)
+            (default: :obj:`swish`, nn.SiLU)
     """
 
     url = "https://github.com/klicperajo/dimenet/raw/master/pretrained"
@@ -240,7 +240,7 @@ class DimeNetPlusPlus(torch.nn.Module):
         num_before_skip=1,
         num_after_skip=2,
         num_output_layers=3,
-        act=swish,
+        act=nn.SiLU(),
     ):
         super(DimeNetPlusPlus, self).__init__()
 
@@ -508,24 +508,3 @@ class GemNetTEncoder(nn.Module):
             num_bonds=data.num_bonds,
         )
         return output
-
-
-@hydra.main(config_path=str(PROJECT_ROOT / "conf"), config_name="default")
-def main(cfg: omegaconf.DictConfig):
-    # -----------------
-    datamodule: pl.LightningDataModule = hydra.utils.instantiate(
-        cfg.data.datamodule, _recursive_=False
-    )
-    datamodule.setup('fit')
-    batch0 = next(iter(datamodule.train_dataloader()))
-    print(batch0)
-    # DimeNet++ Wrap
-    encoder = hydra.utils.instantiate(cfg.model.encoder, num_targets=4)
-    # for name, parms in encoder.named_parameters():
-    #     print(torch.mean(parms), torch.std(parms))
-    hidden = encoder(batch0)
-    print(torch.mean(hidden))
-
-
-if __name__ == '__main__':
-    main()
