@@ -104,7 +104,7 @@ def run(cfg: DictConfig):
 
     # Pass scaler from datamodule to model
     hydra.utils.log.info(
-        f"Passing scaler from datamodule to model <{datamodule.scaler}>"
+        f"Passing scaler from datamodule to model <{datamodule.lattice_scaler}>"
     )
     model.lattice_scaler = datamodule.lattice_scaler.copy()
     torch.save(datamodule.lattice_scaler, hydra_dir / 'lattice_scaler.pt')
@@ -170,7 +170,11 @@ def run(cfg: DictConfig):
         wandb_logger.experiment.finish()
 
 
-@hydra.main(config_path=str(PROJECT_ROOT / "conf"), config_name="default")
+@hydra.main(
+    version_base='1.1',
+    config_path=str(PROJECT_ROOT / "conf"),
+    config_name="default",
+)
 def main(cfg: omegaconf.DictConfig):
     run(cfg)
 

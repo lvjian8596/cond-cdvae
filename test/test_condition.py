@@ -16,7 +16,9 @@ from cdvae.pl_modules.conditioning import (
 
 class TestConditioning(unittest.TestCase):
     def setUp(self):
-        with hydra.initialize_config_dir(config_dir=str(PROJECT_ROOT / "conf")):
+        with hydra.initialize_config_dir(
+            version_base='1.1', config_dir=str(PROJECT_ROOT / "conf")
+        ):
             self.cfg = hydra.compose(
                 config_name="default", overrides=["data=carbon"]
             )
@@ -47,7 +49,18 @@ class TestConditioning(unittest.TestCase):
             self.cfg.model.conditions, _recursive_=False
         )
         cond_vec = multiemb(self.conditions)
-
+        self.assertEqual(cond_vec.shape, (self.B, self.cond_dim))
+        # cuda
+        device = 'cuda'
+        multiemb = multiemb.to(device)
+        conditions = {
+            'composition': (
+                self.batch.atom_types.to(device),
+                self.batch.num_atoms.to(device),
+            ),
+            'energy_per_atom': self.batch.energy_per_atom.to(device),
+        }
+        cond_vec = multiemb(conditions)
         self.assertEqual(cond_vec.shape, (self.B, self.cond_dim))
 
     def test_03_agg(self):
@@ -117,6 +130,10 @@ class TestConditioning(unittest.TestCase):
         )
         self.assertEqual(pred_cart_coord_diff.shape, (self.nnodes, 3))
         # sample
+        from itertools import chain
+
+        from pymatgen.core.composition import Composition
+
         ld_kwargs = SimpleNamespace(
             n_step_each=10,
             step_lr=1e-4,
@@ -124,8 +141,33 @@ class TestConditioning(unittest.TestCase):
             save_traj=False,
             disable_bar=False,
         )
-        sample_dict = model.sample(conditions, ld_kwargs)
-        self.assertEqual(sample_dict['frac_coords'].shape, (self.nnodes, 3))
+        n_sample = 1
+        comp = Composition('H2O')
+        each_atom_types = list(
+            chain.from_iterable(
+                [elem.number] * int(n)
+                for elem, n in Composition(
+                    comp.get_integer_formula_and_factor()[0]
+                ).items()
+            )
+        )
+        device = 'cuda'
+        model = model.to(device)
+        model.eval()
+        num_atoms = torch.tensor(
+            [len(each_atom_types)] * n_sample, device=model.device
+        )
+        atom_types = torch.tensor(
+            each_atom_types * n_sample, device=model.device
+        )
+        sample_conditions = {
+            'composition': (atom_types, num_atoms),
+            'energy_per_atom': torch.ones(n_sample, 1, device=model.device)
+            * 0.1,
+        }
+
+        sample_dict = model.sample(sample_conditions, ld_kwargs)
+        self.assertEqual(sample_dict['frac_coords'].shape, (num_atoms, 3))
 
 
 def main():

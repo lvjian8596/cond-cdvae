@@ -17,11 +17,13 @@ hydra:
     subdir: ${hydra.job.num}_${hydra.job.id}
 
   job:
+    chdir: true
     env_set:
       WANDB_START_METHOD: thread
       WANDB_DIR: ${oc.env:WABDB_DIR}
 
 defaults:
+  - _self_
   - data: default
   - logging: default
   - model: vae
