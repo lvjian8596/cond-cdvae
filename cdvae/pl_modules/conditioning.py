@@ -24,7 +24,10 @@ class CompositionEmbedding(SubEmbedding):
 
     def forward(self, prop):
         atom_types, num_atoms = prop
-        batch = torch.arange(len(num_atoms)).repeat_interleave(num_atoms)
+        batch = torch.repeat_interleave(
+            torch.arange(num_atoms.size(0), device=num_atoms.device),
+            num_atoms,
+        )
         atom_emb = self.emb(atom_types)
         comp_emb = scatter(atom_emb, batch, dim=0, reduce=self.reduce)
         return comp_emb
@@ -165,7 +168,7 @@ class MultiEmbedding(nn.Module):
         self.cond_keys = cond_keys
 
         n_in = 0
-        self.sub_emb_list = []
+        self.sub_emb_list = nn.ModuleList()
         for cond_key in cond_keys:
             sub_emb = hydra.utils.instantiate(types[cond_key])
             self.sub_emb_list.append(sub_emb)
