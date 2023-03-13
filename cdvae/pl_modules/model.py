@@ -110,14 +110,6 @@ class CDVAE(BaseModule):
             self.hparams.fc_num_layers,
             6,
         )
-        # for property prediction.
-        if self.hparams.predict_property:
-            self.fc_property = build_mlp(
-                self.hparams.latent_dim,
-                self.hparams.hidden_dim,
-                self.hparams.fc_num_layers,
-                1,
-            )
 
         sigmas = torch.tensor(
             np.exp(
@@ -445,9 +437,6 @@ class CDVAE(BaseModule):
         # <pred_lengths_and_angles> is scaled.
         return pred_lengths_and_angles, pred_lengths, pred_angles
 
-    def property_loss(self, z, batch):
-        return F.mse_loss(self.fc_property(z), batch.y)
-
     def lattice_loss(self, pred_lengths_and_angles, batch):
         self.lattice_scaler.match_device(pred_lengths_and_angles)
         if self.hparams.data.lattice_scale_method == 'scale_length':
@@ -547,13 +536,11 @@ class CDVAE(BaseModule):
         lattice_loss = outputs['lattice_loss']
         coord_loss = outputs['coord_loss']
         kld_loss = outputs['kld_loss']
-        property_loss = outputs['property_loss']
 
         loss = (
             +self.hparams.cost_lattice * lattice_loss
             + self.hparams.cost_coord * coord_loss
             + self.hparams.beta * kld_loss
-            + self.hparams.cost_property * property_loss
         )
         assert torch.isfinite(lattice_loss)
         assert torch.isfinite(coord_loss)
@@ -593,7 +580,6 @@ class CDVAE(BaseModule):
             log_dict.update(
                 {
                     f'{prefix}_loss': loss,
-                    f'{prefix}_property_loss': property_loss,
                     f'{prefix}_lengths_mard': lengths_mard,
                     f'{prefix}_angles_mae': angles_mae,
                     f'{prefix}_volumes_mard': volumes_mard,
