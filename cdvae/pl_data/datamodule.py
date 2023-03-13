@@ -77,7 +77,9 @@ class CrystDataModule(pl.LightningDataModule):
         """
         if stage is None or stage == "fit":
             if self.train_dataset is None:
-                self.train_dataset = hydra.utils.instantiate(self.datasets.train)
+                self.train_dataset = hydra.utils.instantiate(
+                    self.datasets.train
+                )
             self.val_datasets = [
                 hydra.utils.instantiate(dataset_cfg)
                 for dataset_cfg in self.datasets.val
@@ -135,25 +137,3 @@ class CrystDataModule(pl.LightningDataModule):
             f"{self.num_workers=}, "
             f"{self.batch_size=})"
         )
-
-
-@hydra.main(config_path=str(PROJECT_ROOT / "conf"), config_name="default")
-def main(cfg: omegaconf.DictConfig):
-    datamodule: pl.LightningDataModule = hydra.utils.instantiate(
-        cfg.data.datamodule, _recursive_=False
-    )
-    datamodule.setup()
-    for val_loader in datamodule.val_dataloader():
-        for idx, batch in enumerate(val_loader):
-            if idx == 754:
-                print(batch)
-                print(batch.mp_id, batch.atom_types)
-    # print(batch.atom_types)
-    # print(batch.frac_coords)
-    # import pdb
-
-    # pdb.set_trace()
-
-
-if __name__ == "__main__":
-    main()

@@ -171,35 +171,3 @@ class TensorCrystDataset(Dataset):
 
     def __repr__(self) -> str:
         return f"TensorCrystDataset(len: {len(self.cached_data)})"
-
-
-@hydra.main(config_path=str(PROJECT_ROOT / "conf"), config_name="default")
-def main(cfg: omegaconf.DictConfig):
-    from torch_geometric.data import Batch
-
-    from cdvae.common.data_utils import get_scaler_from_data_list
-
-    dataset: CrystDataset = hydra.utils.instantiate(
-        cfg.data.datamodule.datasets.train, _recursive_=False
-    )
-    lattice_scaler = get_scaler_from_data_list(
-        dataset.cached_data, key='scaled_lattice'
-    )
-    scaler = get_scaler_from_data_list(dataset.cached_data, key=dataset.prop)
-    dataset.lattice_scaler = lattice_scaler
-    dataset.scaler = scaler
-    print(dataset)
-    # -----------
-    # print(dataset.lattice_scaler)
-    # print(dataset.scaler)
-    # print(dataset[0])
-    # print(dataset[0].edge_index)
-    # print(dataset[0].atom_types)
-
-    data_list = [dataset[i] for i in range(len(dataset))]
-    batch = Batch.from_data_list(data_list)
-    return batch
-
-
-if __name__ == "__main__":
-    main()
