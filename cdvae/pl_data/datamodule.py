@@ -61,15 +61,18 @@ class CrystDataModule(pl.LightningDataModule):
     def get_scaler(self, scaler_path):
         # Load once to compute property scaler
         if scaler_path is None:
-            train_dataset = hydra.utils.instantiate(self.datasets.train)
+            self.train_dataset = hydra.utils.instantiate(self.datasets.train)
             self.lattice_scaler = get_scaler_from_data_list(
-                train_dataset.cached_data, key='scaled_lattice'
-            )
-            self.train_dataset = train_dataset
+                self.train_dataset.cached_data, key='scaled_lattice')
+            self.prop_scalers = [
+                get_scaler_from_data_list(self.train_dataset.cached_data, key=p)
+                for p in self.train_dataset.prop
+            ]
         else:
             self.lattice_scaler = torch.load(
-                Path(scaler_path) / 'lattice_scaler.pt'
-            )
+                Path(scaler_path) / 'lattice_scaler.pt')
+            self.prop_scalers = torch.load(
+                Path(scaler_path) / 'prop_scalers.pt')
 
     def setup(self, stage: Optional[str] = None):
         """
@@ -78,16 +81,17 @@ class CrystDataModule(pl.LightningDataModule):
         if stage is None or stage == "fit":
             if self.train_dataset is None:
                 self.train_dataset = hydra.utils.instantiate(
-                    self.datasets.train
-                )
+                    self.datasets.train)
             self.val_datasets = [
                 hydra.utils.instantiate(dataset_cfg)
                 for dataset_cfg in self.datasets.val
             ]
 
             self.train_dataset.lattice_scaler = self.lattice_scaler
+            self.train_dataset.prop_scalers = self.prop_scalers
             for val_dataset in self.val_datasets:
                 val_dataset.lattice_scaler = self.lattice_scaler
+                val_dataset.prop_scalers = self.prop_scalers
 
         if stage is None or stage == "test":
             self.test_datasets = [
@@ -96,6 +100,8 @@ class CrystDataModule(pl.LightningDataModule):
             ]
             for test_dataset in self.test_datasets:
                 test_dataset.lattice_scaler = self.lattice_scaler
+                test_dataset.prop_scalers = self.prop_scalers
+
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -114,8 +120,7 @@ class CrystDataModule(pl.LightningDataModule):
                 batch_size=self.batch_size.val,
                 num_workers=self.num_workers.val,
                 worker_init_fn=worker_init_fn,
-            )
-            for dataset in self.val_datasets
+            ) for dataset in self.val_datasets
         ]
 
     def test_dataloader(self) -> Sequence[DataLoader]:
@@ -126,14 +131,11 @@ class CrystDataModule(pl.LightningDataModule):
                 batch_size=self.batch_size.test,
                 num_workers=self.num_workers.test,
                 worker_init_fn=worker_init_fn,
-            )
-            for dataset in self.test_datasets
+            ) for dataset in self.test_datasets
         ]
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"{self.datasets=}, "
-            f"{self.num_workers=}, "
-            f"{self.batch_size=})"
-        )
+        return (f"{self.__class__.__name__}("
+                f"{self.datasets=}, "
+                f"{self.num_workers=}, "
+                f"{self.batch_size=})")

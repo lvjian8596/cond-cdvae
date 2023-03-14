@@ -25,6 +25,18 @@ class TestConditioning(unittest.TestCase):
             self.datamodule: pl.LightningDataModule = hydra.utils.instantiate(
                 self.cfg.data.datamodule, _recursive_=False
             )
+            self.datamodule.setup()
+            trn_batch = next(iter(self.datamodule.train_dataloader()))
+            self.assertEqual(
+                trn_batch.energy_per_atom.shape,
+                (self.cfg.data.datamodule.batch_size.train, 1),
+            )
+            test_batch = next(iter(self.datamodule.test_dataloader()[0]))
+            self.assertEqual(
+                test_batch.energy_per_atom.shape,
+                (self.cfg.data.datamodule.batch_size.test, 1),
+            )
+
             self.batch = next(iter(self.datamodule.train_dataloader()))
 
             self.B = self.cfg.data.datamodule.batch_size.train

@@ -61,7 +61,7 @@ class CrystDataset(Dataset):
 
         add_scaled_lattice_prop(self.cached_data, lattice_scale_method)
         self.lattice_scaler = None
-        self.scaler = None
+        self.prop_scalers: list = None  # list of prop_scaler
 
     def __len__(self) -> int:
         return len(self.cached_data)
@@ -71,6 +71,11 @@ class CrystDataset(Dataset):
         # {'mp_id', 'cif', 'graph_array' **prop}
 
         # scaler is set in DataModule set stage
+        p_dict = {
+            p: prop_scaler.transform(torch.tensor(data_dict[p]).view(1, -1))
+            for p, prop_scaler in zip(self.prop, self.prop_scalers, strict=True)
+        }
+
         (
             frac_coords,
             atom_types,
@@ -94,12 +99,10 @@ class CrystDataset(Dataset):
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
-            num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
+            num_nodes=
+            num_atoms,  # special attribute used for batching in pytorch geometric
             mp_id=data_dict['mp_id'],
-            **{
-                p: torch.tensor(data_dict[p]).float().view(1, -1)
-                for p in self.prop
-            },
+            **p_dict,
         )
         return data
 
@@ -160,12 +163,12 @@ class TensorCrystDataset(Dataset):
             lengths=torch.Tensor(lengths).view(1, -1),
             angles=torch.Tensor(angles).view(1, -1),
             edge_index=torch.LongTensor(
-                edge_indices.T
-            ).contiguous(),  # shape (2, num_edges)
+                edge_indices.T).contiguous(),  # shape (2, num_edges)
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
-            num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
+            num_nodes=
+            num_atoms,  # special attribute used for batching in pytorch geometric
         )
         return data
 
