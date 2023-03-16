@@ -226,15 +226,15 @@ class DimeNetPlusPlus(torch.nn.Module):
 
     def __init__(
         self,
-        cond_dim,  # condition vec dim
-        hidden_channels,  # internal dim
-        out_channels,  # output dim
-        num_blocks,
-        int_emb_size,
-        basis_emb_size,
-        out_emb_channels,
-        num_spherical,
-        num_radial,
+        out_channels,  # output dim, num_targets
+        cond_dim=128,  # condition vec dim
+        hidden_channels=128,  # internal dim
+        num_blocks=4,
+        int_emb_size=64,
+        basis_emb_size=8,
+        out_emb_channels=256,
+        num_spherical=7,
+        num_radial=6,
         cutoff=5.0,
         envelope_exponent=5,
         num_before_skip=1,
@@ -256,6 +256,7 @@ class DimeNetPlusPlus(torch.nn.Module):
             num_spherical, num_radial, cutoff, envelope_exponent
         )
 
+        self.atomemb = AtomEmbedding(hidden_channels)
         self.atomwisecond = AtomwiseConditioning(cond_dim, hidden_channels)
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
@@ -332,8 +333,8 @@ class DimeNetPlusPlus(torch.nn.Module):
 class DimeNetPlusPlusWrap(DimeNetPlusPlus):
     def __init__(
         self,
-        cond_dim,
         num_targets,
+        cond_dim=128,
         hidden_channels=128,
         num_blocks=4,
         int_emb_size=64,
@@ -349,6 +350,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         num_after_skip=2,
         num_output_layers=3,
         readout='mean',
+        supervise=False,
     ):
         self.num_targets = num_targets
         self.cutoff = cutoff
@@ -357,10 +359,12 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
 
         self.readout = readout
 
+        self.supervise = supervise
+
         super(DimeNetPlusPlusWrap, self).__init__(
+            out_channels=num_targets,
             cond_dim=cond_dim,
             hidden_channels=hidden_channels,
-            out_channels=num_targets,
             num_blocks=num_blocks,
             int_emb_size=int_emb_size,
             basis_emb_size=basis_emb_size,
@@ -374,7 +378,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
             num_output_layers=num_output_layers,
         )
 
-    def forward(self, data, cond_vec):
+    def forward(self, data, cond_vec=None):
         batch = data.batch
 
         if self.otf_graph:  # compute new graph data
@@ -426,7 +430,10 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         sbf = self.sbf(dist, angle, idx_kj)
 
         # Embedding block.
-        x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
+        if self.supervise:
+            x = self.atomemb(data.atom_types)
+        else:
+            x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
         x = self.emb(x, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 

@@ -39,7 +39,8 @@ def detact_overflow(x: torch.Tensor, threshold, batch, label: str):
     idx = torch.nonzero(overflow, as_tuple=True)[0]  # overflow index
     if idx.size(0) > 0:
         warnings.warn(
-            f"{label} exceed {threshold}: {[batch.mp_id[i] for i in idx]}")
+            f"{label} exceed {threshold}: {[batch.mp_id[i] for i in idx]}"
+        )
 
 
 class BaseModule(pl.LightningModule):
@@ -56,8 +57,9 @@ class BaseModule(pl.LightningModule):
         )
         if not self.hparams.optim.use_lr_scheduler:
             return [opt]
-        scheduler = hydra.utils.instantiate(self.hparams.optim.lr_scheduler,
-                                            optimizer=opt)
+        scheduler = hydra.utils.instantiate(
+            self.hparams.optim.lr_scheduler, optimizer=opt
+        )
         return {
             "optimizer": opt,
             "lr_scheduler": {
@@ -74,8 +76,9 @@ class BaseModule(pl.LightningModule):
         gradient_clip_val,
         gradient_clip_algorithm,
     ):
-        self.clip_gradients(optimizer, gradient_clip_val,
-                            gradient_clip_algorithm)
+        self.clip_gradients(
+            optimizer, gradient_clip_val, gradient_clip_algorithm
+        )
 
 
 class CDVAE(BaseModule):
@@ -90,6 +93,7 @@ class CDVAE(BaseModule):
         self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
             self.hparams.encoder,
             num_targets=self.hparams.latent_dim,
+            cond_dim=self.hparams.conditions.cond_dim,
         )
         self.agg_cond = AggregateConditioning(
             self.hparams.conditions.cond_dim,
@@ -121,7 +125,8 @@ class CDVAE(BaseModule):
                     np.log(self.hparams.sigma_begin),
                     np.log(self.hparams.sigma_end),
                     self.hparams.num_noise_level,
-                )),
+                )
+            ),
             dtype=torch.float32,
         )
 
@@ -133,7 +138,8 @@ class CDVAE(BaseModule):
                     np.log(self.hparams.type_sigma_begin),
                     np.log(self.hparams.type_sigma_end),
                     self.hparams.num_noise_level,
-                )),
+                )
+            ),
             dtype=torch.float32,
         )
 
@@ -145,9 +151,6 @@ class CDVAE(BaseModule):
             torch.tensor(1),
         )
         self.prop_scalers = []
-
-    def regress(self, batch):
-        return self.reg_model(batch)
 
     def build_conditions(self, batch):
         conditions = {}
@@ -205,7 +208,8 @@ class CDVAE(BaseModule):
         batch is input during training for teach-forcing.
         """
         lengths_and_angles, lengths, angles = self.predict_lattice(
-            z, gt_num_atoms)
+            z, gt_num_atoms
+        )
         # Train stage
         if self.hparams.teacher_forcing_lattice and teacher_forcing:
             lengths = gt_lengths
@@ -258,17 +262,18 @@ class CDVAE(BaseModule):
 
         # annealed langevin dynamics.
         for sigma in tqdm(
-                self.sigmas,
-                total=self.sigmas.size(0),
-                disable=ld_kwargs.disable_bar,
+            self.sigmas,
+            total=self.sigmas.size(0),
+            disable=ld_kwargs.disable_bar,
         ):
             if sigma < ld_kwargs.min_sigma:
                 break
-            step_size = ld_kwargs.step_lr * (sigma / self.sigmas[-1])**2
+            step_size = ld_kwargs.step_lr * (sigma / self.sigmas[-1]) ** 2
 
             for step in range(ld_kwargs.n_step_each):
                 noise_cart = torch.randn_like(cur_frac_coords) * torch.sqrt(
-                    step_size * 2)
+                    step_size * 2
+                )
                 pred_cart_coord_diff, pred_atom_types = self.decoder(
                     cond_z,
                     cur_frac_coords,
@@ -277,22 +282,27 @@ class CDVAE(BaseModule):
                     lengths,
                     angles,
                 )
-                cur_cart_coords = frac_to_cart_coords(cur_frac_coords, lengths,
-                                                      angles, num_atoms)
+                cur_cart_coords = frac_to_cart_coords(
+                    cur_frac_coords, lengths, angles, num_atoms
+                )
                 pred_cart_coord_diff = pred_cart_coord_diff / sigma
-                cur_cart_coords = (cur_cart_coords +
-                                   step_size * pred_cart_coord_diff +
-                                   noise_cart)
-                cur_frac_coords = cart_to_frac_coords(cur_cart_coords, lengths,
-                                                      angles, num_atoms)
+                cur_cart_coords = (
+                    cur_cart_coords
+                    + step_size * pred_cart_coord_diff
+                    + noise_cart
+                )
+                cur_frac_coords = cart_to_frac_coords(
+                    cur_cart_coords, lengths, angles, num_atoms
+                )
 
                 if gt_atom_types is None:  # never used
                     cur_atom_types = torch.argmax(pred_atom_types, dim=1) + 1
 
                 if ld_kwargs.save_traj:
                     all_frac_coords.append(cur_frac_coords)
-                    all_pred_cart_coord_diff.append(step_size *
-                                                    pred_cart_coord_diff)
+                    all_pred_cart_coord_diff.append(
+                        step_size * pred_cart_coord_diff
+                    )
                     all_noise_cart.append(noise_cart)
                     all_atom_types.append(cur_atom_types)
 
@@ -311,10 +321,12 @@ class CDVAE(BaseModule):
                     all_frac_coords=torch.stack(all_frac_coords, dim=0),
                     all_atom_types=torch.stack(all_atom_types, dim=0),
                     all_pred_cart_coord_diff=torch.stack(
-                        all_pred_cart_coord_diff, dim=0),
+                        all_pred_cart_coord_diff, dim=0
+                    ),
                     all_noise_cart=torch.stack(all_noise_cart, dim=0),
                     is_traj=True,
-                ))
+                )
+            )
 
         return output_dict
 
@@ -330,14 +342,15 @@ class CDVAE(BaseModule):
         """
         gt_atom_types, gt_num_atoms = conditions['composition']
         num_samples = gt_num_atoms.shape[0]
-        z = torch.randn(num_samples,
-                        self.hparams.hidden_dim,
-                        device=self.device)
+        z = torch.randn(
+            num_samples, self.hparams.hidden_dim, device=self.device
+        )
         # cond z
         cond_vec = self.multiemb(conditions)
         cond_z = self.agg_cond(cond_vec, z)
-        samples = self.langevin_dynamics(cond_z, ld_kwargs, gt_num_atoms,
-                                         gt_atom_types)
+        samples = self.langevin_dynamics(
+            cond_z, ld_kwargs, gt_num_atoms, gt_atom_types
+        )
         return samples
 
     def forward(self, batch, teacher_forcing=False, training=True):
@@ -368,21 +381,25 @@ class CDVAE(BaseModule):
         noise_level = torch.randint(
             0,
             self.sigmas.size(0),
-            (batch.num_atoms.size(0), ),
+            (batch.num_atoms.size(0),),
             device=self.device,
         )
         used_sigmas_per_atom = self.sigmas[noise_level].repeat_interleave(
-            batch.num_atoms, dim=0)
+            batch.num_atoms, dim=0
+        )
 
         # add noise to the cart coords
-        cart_noises_per_atom = (torch.randn_like(batch.frac_coords) *
-                                used_sigmas_per_atom[:, None])
-        cart_coords = frac_to_cart_coords(batch.frac_coords, pred_lengths,
-                                          pred_angles, batch.num_atoms)
+        cart_noises_per_atom = (
+            torch.randn_like(batch.frac_coords) * used_sigmas_per_atom[:, None]
+        )
+        cart_coords = frac_to_cart_coords(
+            batch.frac_coords, pred_lengths, pred_angles, batch.num_atoms
+        )
         # N(X, σX^2 I) =    X    +    σX * N(0, 1)
         cart_coords = cart_coords + cart_noises_per_atom
         noisy_frac_coords = cart_to_frac_coords(  # ~X
-            cart_coords, pred_lengths, pred_angles, batch.num_atoms)
+            cart_coords, pred_lengths, pred_angles, batch.num_atoms
+        )
 
         pred_cart_coord_diff, _ = self.decoder(
             cond_z,
@@ -395,8 +412,9 @@ class CDVAE(BaseModule):
 
         # compute loss.
         lattice_loss = self.lattice_loss(pred_lengths_and_angles, batch)
-        coord_loss = self.coord_loss(pred_cart_coord_diff, noisy_frac_coords,
-                                     used_sigmas_per_atom, batch)
+        coord_loss = self.coord_loss(
+            pred_cart_coord_diff, noisy_frac_coords, used_sigmas_per_atom, batch
+        )
 
         kld_loss = self.kld_loss(mu, log_var)
 
@@ -418,11 +436,14 @@ class CDVAE(BaseModule):
         self.lattice_scaler.match_device(z)
         pred_lengths_and_angles = self.fc_lattice(z)  # (N, 6)
         scaled_preds = self.lattice_scaler.inverse_transform(
-            pred_lengths_and_angles)
+            pred_lengths_and_angles
+        )
         pred_lengths = scaled_preds[:, :3]
         pred_angles = scaled_preds[:, 3:]
         if self.hparams.data.lattice_scale_method == 'scale_length':
-            pred_lengths = pred_lengths * num_atoms.view(-1, 1).float()**(1 / 3)
+            pred_lengths = pred_lengths * num_atoms.view(-1, 1).float() ** (
+                1 / 3
+            )
         # <pred_lengths_and_angles> is scaled.
         return pred_lengths_and_angles, pred_lengths, pred_angles
 
@@ -430,11 +451,14 @@ class CDVAE(BaseModule):
         self.lattice_scaler.match_device(pred_lengths_and_angles)
         if self.hparams.data.lattice_scale_method == 'scale_length':
             target_lengths = batch.lengths / batch.num_atoms.view(
-                -1, 1).float()**(1 / 3)
-        target_lengths_and_angles = torch.cat([target_lengths, batch.angles],
-                                              dim=-1)
+                -1, 1
+            ).float() ** (1 / 3)
+        target_lengths_and_angles = torch.cat(
+            [target_lengths, batch.angles], dim=-1
+        )
         target_lengths_and_angles = self.lattice_scaler.transform(
-            target_lengths_and_angles)
+            target_lengths_and_angles
+        )
         return F.mse_loss(pred_lengths_and_angles, target_lengths_and_angles)
 
     def coord_loss(
@@ -444,12 +468,12 @@ class CDVAE(BaseModule):
         used_sigmas_per_atom,
         batch,
     ):
-        noisy_cart_coords = frac_to_cart_coords(noisy_frac_coords,
-                                                batch.lengths, batch.angles,
-                                                batch.num_atoms)
-        target_cart_coords = frac_to_cart_coords(batch.frac_coords,
-                                                 batch.lengths, batch.angles,
-                                                 batch.num_atoms)
+        noisy_cart_coords = frac_to_cart_coords(
+            noisy_frac_coords, batch.lengths, batch.angles, batch.num_atoms
+        )
+        target_cart_coords = frac_to_cart_coords(
+            batch.frac_coords, batch.lengths, batch.angles, batch.num_atoms
+        )
         _, target_cart_coord_diff = min_distance_sqr_pbc(
             target_cart_coords,
             noisy_cart_coords,
@@ -460,13 +484,16 @@ class CDVAE(BaseModule):
             return_vector=True,
         )
 
-        target_cart_coord_diff = (target_cart_coord_diff /
-                                  used_sigmas_per_atom[:, None]**2)
-        pred_cart_coord_diff = (pred_cart_coord_diff /
-                                used_sigmas_per_atom[:, None])
+        target_cart_coord_diff = (
+            target_cart_coord_diff / used_sigmas_per_atom[:, None] ** 2
+        )
+        pred_cart_coord_diff = (
+            pred_cart_coord_diff / used_sigmas_per_atom[:, None]
+        )
 
         loss_per_atom = torch.sum(
-            (target_cart_coord_diff - pred_cart_coord_diff)**2, dim=1)
+            (target_cart_coord_diff - pred_cart_coord_diff) ** 2, dim=1
+        )
 
         loss_per_atom = 0.5 * loss_per_atom * used_sigmas_per_atom**2
         return scatter(loss_per_atom, batch.batch, reduce='mean').mean()
@@ -479,8 +506,9 @@ class CDVAE(BaseModule):
         return kld_loss
 
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
-        teacher_forcing = (self.current_epoch <=
-                           self.hparams.teacher_forcing_max_epoch)
+        teacher_forcing = (
+            self.current_epoch <= self.hparams.teacher_forcing_max_epoch
+        )
         outputs = self(batch, teacher_forcing, training=True)
         # print(torch.max(outputs['z']))
         log_dict, loss = self.compute_stats(batch, outputs, prefix='train')
@@ -519,9 +547,11 @@ class CDVAE(BaseModule):
         coord_loss = outputs['coord_loss']
         kld_loss = outputs['kld_loss']
 
-        loss = (+self.hparams.cost_lattice * lattice_loss +
-                self.hparams.cost_coord * coord_loss +
-                self.hparams.beta * kld_loss)
+        loss = (
+            +self.hparams.cost_lattice * lattice_loss
+            + self.hparams.cost_coord * coord_loss
+            + self.hparams.beta * kld_loss
+        )
         assert torch.isfinite(lattice_loss)
         assert torch.isfinite(coord_loss)
         assert torch.isfinite(kld_loss)
@@ -541,13 +571,15 @@ class CDVAE(BaseModule):
             # evalute lattice prediction.
             pred_lengths_and_angles = outputs['pred_lengths_and_angles']
             scaled_preds = self.lattice_scaler.inverse_transform(
-                pred_lengths_and_angles)
+                pred_lengths_and_angles
+            )
             pred_lengths = scaled_preds[:, :3]
             pred_angles = scaled_preds[:, 3:]
 
             if self.hparams.data.lattice_scale_method == 'scale_length':
                 pred_lengths = pred_lengths * batch.num_atoms.view(
-                    -1, 1).float()**(1 / 3)
+                    -1, 1
+                ).float() ** (1 / 3)
             lengths_mard = mard(batch.lengths, pred_lengths)
             angles_mae = torch.mean(torch.abs(pred_angles - batch.angles))
 
@@ -555,11 +587,44 @@ class CDVAE(BaseModule):
             true_volumes = lengths_angles_to_volume(batch.lengths, batch.angles)
             volumes_mard = mard(true_volumes, pred_volumes)
 
-            log_dict.update({
-                f'{prefix}_loss': loss,
-                f'{prefix}_lengths_mard': lengths_mard,
-                f'{prefix}_angles_mae': angles_mae,
-                f'{prefix}_volumes_mard': volumes_mard,
-            })
+            log_dict.update(
+                {
+                    f'{prefix}_loss': loss,
+                    f'{prefix}_lengths_mard': lengths_mard,
+                    f'{prefix}_angles_mae': angles_mae,
+                    f'{prefix}_volumes_mard': volumes_mard,
+                }
+            )
 
         return log_dict, loss
+
+
+class CrystGNN_Supervise(BaseModule):
+    """
+    GNN model for fitting the supervised objectives for crystals.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
+            self.hparams.encoder,
+            num_targets=sum(self.hparams.num_targets),
+            supervise=True,
+        )
+
+    def forward(self, batch):
+        preds = self.encoder(batch)
+        preds = torch.split(preds, self.hparms.num_targets)
+        return preds
+
+    def training_step(self, batch, batch_idx):
+        pass
+
+    def validation_step(self, batch, batch_idx):
+        pass
+
+    def test_step(self, batch, batch_idx):
+        pass
+
+    def compute_stats(self, batch, preds, prefix):
+        pass
