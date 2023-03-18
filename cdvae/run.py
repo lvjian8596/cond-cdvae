@@ -25,7 +25,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 def build_callbacks(cfg: DictConfig) -> List[Callback]:
     callbacks: List[Callback] = []
-    callbacks.append(BatchSizeFinder())
+    # callbacks.append(BatchSizeFinder())
 
     if "lr_monitor" in cfg.logging:
         hydra.utils.log.info("Adding callback <LearningRateMonitor>")
