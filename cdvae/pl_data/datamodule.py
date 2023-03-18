@@ -45,6 +45,9 @@ class CrystDataModule(pl.LightningDataModule):
         self.datasets = datasets
         self.num_workers = num_workers
         self.batch_size = batch_size
+        self.train_batch_size = batch_size.train
+        self.val_batch_size = batch_size.val
+        self.test_batch_size = batch_size.test
         self.scaler_path = scaler_path
 
         self.train_dataset: Optional[Dataset] = None
@@ -107,7 +110,7 @@ class CrystDataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset,
             shuffle=True,
-            batch_size=self.batch_size.train,
+            batch_size=self.train_batch_size,
             num_workers=self.num_workers.train,
             worker_init_fn=worker_init_fn,
         )
@@ -117,7 +120,7 @@ class CrystDataModule(pl.LightningDataModule):
             DataLoader(
                 dataset,
                 shuffle=False,
-                batch_size=self.batch_size.val,
+                batch_size=self.val_batch_size,
                 num_workers=self.num_workers.val,
                 worker_init_fn=worker_init_fn,
             ) for dataset in self.val_datasets
@@ -128,7 +131,7 @@ class CrystDataModule(pl.LightningDataModule):
             DataLoader(
                 dataset,
                 shuffle=False,
-                batch_size=self.batch_size.test,
+                batch_size=self.test_batch_size,
                 num_workers=self.num_workers.test,
                 worker_init_fn=worker_init_fn,
             ) for dataset in self.test_datasets

@@ -350,7 +350,6 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         num_after_skip=2,
         num_output_layers=3,
         readout='mean',
-        supervise=False,
     ):
         self.num_targets = num_targets
         self.cutoff = cutoff
@@ -358,8 +357,6 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         self.otf_graph = otf_graph
 
         self.readout = readout
-
-        self.supervise = supervise
 
         super(DimeNetPlusPlusWrap, self).__init__(
             out_channels=num_targets,
@@ -430,10 +427,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         sbf = self.sbf(dist, angle, idx_kj)
 
         # Embedding block.
-        if self.supervise:
-            x = self.atomemb(data.atom_types)
-        else:
-            x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
+        x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
         x = self.emb(x, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 
