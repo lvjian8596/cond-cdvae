@@ -45,7 +45,7 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy val
         path: ${data.root_path}/val.csv
-        save_path: ${data.root_path}/train.pkl  # processed data
+        save_path: ${data.root_path}/val.pkl  # processed data
         force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
@@ -58,7 +58,7 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy test
         path: ${data.root_path}/test.csv
-        save_path: ${data.root_path}/train.pkl  # processed data
+        save_path: ${data.root_path}/test.pkl  # processed data
         force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
