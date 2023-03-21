@@ -105,6 +105,8 @@ class CDVAE(BaseModule):
             self.hparams.hidden_dim,
             self.hparams.fc_num_layers,
             6,
+            dropout=True,
+            drop_ratio=0.2,
         )
         hydra.utils.log.info("Initializing decoder done")
 
