@@ -65,14 +65,10 @@ def reconstruction(
             batch_angles.append(outputs['angles'].detach().cpu())
             if ld_kwargs.save_traj:
                 batch_all_frac_coords.append(
-                    outputs['all_frac_coords'][::down_sample_traj_step]
-                    .detach()
-                    .cpu()
+                    outputs['all_frac_coords'][::down_sample_traj_step].detach().cpu()
                 )
                 batch_all_atom_types.append(
-                    outputs['all_atom_types'][::down_sample_traj_step]
-                    .detach()
-                    .cpu()
+                    outputs['all_atom_types'][::down_sample_traj_step].detach().cpu()
                 )
         # collect sampled crystals for this z.
         frac_coords.append(torch.stack(batch_frac_coords, dim=0))
@@ -81,12 +77,8 @@ def reconstruction(
         lengths.append(torch.stack(batch_lengths, dim=0))
         angles.append(torch.stack(batch_angles, dim=0))
         if ld_kwargs.save_traj:
-            all_frac_coords_stack.append(
-                torch.stack(batch_all_frac_coords, dim=0)
-            )
-            all_atom_types_stack.append(
-                torch.stack(batch_all_atom_types, dim=0)
-            )
+            all_frac_coords_stack.append(torch.stack(batch_all_frac_coords, dim=0))
+            all_atom_types_stack.append(torch.stack(batch_all_atom_types, dim=0))
         # Save the ground truth structure
         input_data_list = input_data_list + batch.to_data_list()
 
@@ -121,6 +113,7 @@ def generation(
     down_sample_traj_step=1,
     formula=None,
     train_data=None,
+    **norm_target_props,
 ):
     all_frac_coords_stack = []
     all_atom_types_stack = []
@@ -130,61 +123,63 @@ def generation(
     lengths = []
     angles = []
 
-    if not (formula is None) ^ (train_data is None):
-        raise Exception("formula and train_data should only specify one")
-    elif formula is not None:
-        comp = Composition(formula)
-        specified_atom_types = get_atom_types(comp)
-        sampled_num_atoms = [len(specified_atom_types)] * batch_size  # (B,)
-        sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
-        sampled_atom_types = specified_atom_types * batch_size  # (Nnode,)
-        sampled_atom_types = torch.tensor(
-            sampled_atom_types, device=model.device
-        )
-    elif train_data is not None:  # load cached data
-        cached_data = pickle.load(open(train_data, 'rb'))
-
-        def get_atom_types(sample):
-            return sample['graph_arrays'][1]  # [atomic_number list]
-
-        comp_counts = dict(
-            Counter(
-                Composition(dict(Counter(get_atom_types(sample))))
-                for sample in cached_data
-            )
-        )
-        sampled_comps = random.choices(
-            population=list(comp_counts.keys()),
-            weights=list(comp_counts.values()),
-            k=batch_size,
-        )
-        sampled_atom_types = list(
-            chain.from_iterable(
-                composition2atom_types(comp) for comp in sampled_comps
-            )
-        )
-        sampled_num_atoms = [comp.num_atoms for comp in sampled_comps]
-        sampled_atom_types = torch.tensor(
-            sampled_atom_types, device=model.device
-        )
-        sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
-
     for z_idx in range(num_batches_to_sample):
+        # init args for this batch
+        if not (formula is None) ^ (train_data is None):
+            raise Exception("formula and train_data should only specify one")
+        elif formula is not None:
+            comp = Composition(formula)
+            specified_atom_types = get_atom_types(comp)
+            sampled_num_atoms = [len(specified_atom_types)] * batch_size  # (B,)
+            sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
+            sampled_atom_types = specified_atom_types * batch_size  # (Nnode,)
+            sampled_atom_types = torch.tensor(sampled_atom_types, device=model.device)
+        elif train_data is not None:  # load cached data
+            cached_data = pickle.load(open(train_data, 'rb'))
+
+            def get_atom_types(sample):
+                return sample['graph_arrays'][1]  # [atomic_number list]
+
+            comp_counts = dict(
+                Counter(
+                    Composition(dict(Counter(get_atom_types(sample))))
+                    for sample in cached_data
+                )
+            )
+            sampled_comps = random.choices(
+                population=list(comp_counts.keys()),
+                weights=list(comp_counts.values()),
+                k=batch_size,
+            )
+            sampled_atom_types = list(
+                chain.from_iterable(
+                    composition2atom_types(comp) for comp in sampled_comps
+                )
+            )
+            sampled_num_atoms = [comp.num_atoms for comp in sampled_comps]
+            sampled_atom_types = torch.tensor(sampled_atom_types, device=model.device)
+            sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
+        # return `sampled_atom_types` and `sampled_num_atoms`
+        conditions = {
+            k: torch.tensor([v] * batch_size, device=model.device).view(-1, 1)
+            for k, v in norm_target_props.items()
+        }
+        conditions['composition'] = (sampled_atom_types, sampled_num_atoms)
+        # return conditions dict
+
         batch_all_frac_coords = []
         batch_all_atom_types = []
         batch_frac_coords, batch_num_atoms, batch_atom_types = [], [], []
         batch_lengths, batch_angles = [], []
 
-        z = torch.randn(
-            batch_size, model.hparams.hidden_dim, device=model.device
-        )
-        # cond z
-        # !!!
-        z = model.comp_cond(z, sampled_atom_types, sampled_num_atoms)
+        # z & cond z
+        z = torch.randn(batch_size, model.hparams.hidden_dim, device=model.device)
+        cond_vec = model.multiemb(conditions)
+        cond_z = model.agg_cond(cond_vec, z)
 
         for sample_idx in range(num_samples_per_z):
             samples = model.langevin_dynamics(
-                z, ld_kwargs, sampled_num_atoms, sampled_atom_types
+                cond_z, ld_kwargs, sampled_num_atoms, sampled_atom_types
             )
 
             # collect sampled crystals in this batch.
@@ -195,14 +190,10 @@ def generation(
             batch_angles.append(samples['angles'].detach().cpu())
             if ld_kwargs.save_traj:
                 batch_all_frac_coords.append(
-                    samples['all_frac_coords'][::down_sample_traj_step]
-                    .detach()
-                    .cpu()
+                    samples['all_frac_coords'][::down_sample_traj_step].detach().cpu()
                 )
                 batch_all_atom_types.append(
-                    samples['all_atom_types'][::down_sample_traj_step]
-                    .detach()
-                    .cpu()
+                    samples['all_atom_types'][::down_sample_traj_step].detach().cpu()
                 )
 
         # collect sampled crystals for this z.
@@ -212,12 +203,8 @@ def generation(
         lengths.append(torch.stack(batch_lengths, dim=0))
         angles.append(torch.stack(batch_angles, dim=0))
         if ld_kwargs.save_traj:
-            all_frac_coords_stack.append(
-                torch.stack(batch_all_frac_coords, dim=0)
-            )
-            all_atom_types_stack.append(
-                torch.stack(batch_all_atom_types, dim=0)
-            )
+            all_frac_coords_stack.append(torch.stack(batch_all_frac_coords, dim=0))
+            all_atom_types_stack.append(torch.stack(batch_all_atom_types, dim=0))
 
     frac_coords = torch.cat(frac_coords, dim=1)
     num_atoms = torch.cat(num_atoms, dim=1)
@@ -359,6 +346,9 @@ def main(args):
             args.down_sample_traj_step,
             args.formula,
             args.train_data,
+            **{
+                'energy_per_atom': args.energy_per_atom,
+            },
         )
 
         if args.label == '':
@@ -419,9 +409,8 @@ if __name__ == '__main__':
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
     parser.add_argument('--formula', help="formula to generate")
-    parser.add_argument(
-        '--train_data', help="training cached_data(pkl) for sample composition"
-    )
+    parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
+    parser.add_argument('--energy_per_atom', default=-1, type=float, help="target prop")
 
     args = parser.parse_args()
 
