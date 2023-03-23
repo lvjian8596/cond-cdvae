@@ -105,8 +105,7 @@ class CDVAE(BaseModule):
             self.hparams.hidden_dim,
             self.hparams.fc_num_layers,
             6,
-            dropout=True,
-            drop_ratio=0.2,
+            self.hparams.lattice_dropout,
         )
         hydra.utils.log.info("Initializing decoder done")
 
@@ -351,6 +350,7 @@ class CDVAE(BaseModule):
 
         # hacky way to resolve the NaN issue. Will need more careful debugging later.
         mu, log_var, z = self.encode(batch, cond_vec)
+        assert torch.isfinite(z).all()
 
         # z (B, lattent_dim)
         cond_z = self.agg_cond(cond_vec, z)
