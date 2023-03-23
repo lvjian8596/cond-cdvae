@@ -2,6 +2,7 @@ _target_: cdvae.pl_modules.model.CDVAE
 hidden_dim: 256
 latent_dim: 256
 fc_num_layers: 1
+lattice_dropout: 0.2
 cost_natom: 1.
 cost_coord: 10.
 cost_type: 1.
