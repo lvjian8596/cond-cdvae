@@ -35,6 +35,16 @@ except ImportError:
     sym = None
 
 
+class ScaledSiLU(nn.Module):
+    def __init__(self, factor=1):
+        super().__init__()
+        self.scale_factor = factor
+        self._activation = nn.SiLU()
+
+    def forward(self, x):
+        return self._activation(x) * self.scale_factor
+
+
 class EmbeddingBlock(nn.Module):
     """Modified EmbeddingBlock
 
@@ -70,7 +80,7 @@ class InteractionPPBlock(torch.nn.Module):
         num_radial,
         num_before_skip,
         num_after_skip,
-        act=nn.SiLU(),
+        act=ScaledSiLU(1),
     ):
         super(InteractionPPBlock, self).__init__()
         self.act = act
@@ -437,6 +447,8 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         ):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
             P += output_block(x, rbf, i, num_nodes=pos.size(0))
+            assert torch.isfinite(x).all(), f"explosion in Interaction"
+            assert torch.isfinite(P).all(), f"explosion in Interaction"
 
         # Use mean
         if batch is None:
