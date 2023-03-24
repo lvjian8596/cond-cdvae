@@ -13,7 +13,7 @@ class TestSupervise(unittest.TestCase):
         ):
             self.cfg = hydra.compose(
                 config_name="default",
-                overrides=["data=carbon", "model=supervise"],
+                overrides=["data=carbon"],
             )
         self.model = hydra.utils.instantiate(self.cfg.model, _recursive_=False)
 
