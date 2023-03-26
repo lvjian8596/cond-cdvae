@@ -45,6 +45,7 @@ class CrystDataset(Dataset):
         self.lattice_scale_method = lattice_scale_method
 
         if self.force_process or not Path(self.save_path).exists():
+            hydra.utils.log.info(f"Dumping into {self.save_path} ...")
             self.cached_data = preprocess(
                 self.path,
                 preprocess_workers,
@@ -53,10 +54,9 @@ class CrystDataset(Dataset):
                 graph_method=self.graph_method,
                 prop_list=prop,
             )
-            hydra.utils.log.info(f"Dump into {self.save_path} ...")
             pickle.dump(self.cached_data, open(self.save_path, 'wb'))
         else:
-            hydra.utils.log.info(f"Load from {self.save_path} ...")
+            hydra.utils.log.info(f"Loading from {self.save_path} ...")
             self.cached_data = pickle.load(open(self.save_path, 'rb'))
 
         add_scaled_lattice_prop(self.cached_data, lattice_scale_method)
