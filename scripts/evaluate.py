@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import torch
 from eval_utils import composition2atom_types, load_model
-from pymatgen.core.composition import Composition
+from pymatgen.core.composition import Composition, Element
 from torch.optim import Adam
 from torch_geometric.data import Batch
 from tqdm import tqdm
@@ -122,6 +122,14 @@ def generation(
     atom_types = []
     lengths = []
     angles = []
+
+    def get_atom_types(compositon: Composition):
+        atom_types = list(
+            chain.from_iterable(
+                [Element(spec).number] * int(n) for spec, n in compositon.items()
+            )
+        )
+        return torch.tensor(atom_types)
 
     for z_idx in range(num_batches_to_sample):
         # init args for this batch
@@ -348,6 +356,7 @@ def main(args):
             args.train_data,
             **{
                 'energy_per_atom': args.energy_per_atom,
+                'energy': args.energy,
             },
         )
 
@@ -411,6 +420,7 @@ if __name__ == '__main__':
     parser.add_argument('--formula', help="formula to generate")
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     parser.add_argument('--energy_per_atom', default=-1, type=float, help="target prop")
+    parser.add_argument('--energy', default=-1, type=float, help="target prop")
 
     args = parser.parse_args()
 

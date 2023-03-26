@@ -1,5 +1,6 @@
 import argparse
 import json
+import pickle
 import os
 from collections import Counter
 from pathlib import Path
@@ -314,6 +315,10 @@ def main(args):
             _, true_crystal_array_list = get_crystal_array_list(
                 recon_file_path)
             gt_crys = p_map(lambda x: Crystal(x), true_crystal_array_list)
+        # else:
+        #     cached_data = pickle.load(open(args.train_data, 'rb'))
+        #     batch = cached_data['graph_array']
+        #     true_crystal_array_list = p_map(lambda x: Crystal(x), cached_data)
 
         gen_evaluator = GenEval(
             gen_crys, gt_crys, eval_model_name=eval_model_name)
@@ -359,5 +364,6 @@ if __name__ == '__main__':
     parser.add_argument('--root_path', required=True)
     parser.add_argument('--label', default='')
     parser.add_argument('--tasks', nargs='+', default=['recon', 'gen', 'opt'])
+    parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     args = parser.parse_args()
     main(args)
