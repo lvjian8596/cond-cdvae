@@ -22,6 +22,11 @@ from cdvae.common.utils import PROJECT_ROOT, log_hyperparameters
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+# from torch import _dynamo
+#
+# _dynamo.config.verbose = True
+# _dynamo.config.suppress_errors = True
+
 
 def build_callbacks(cfg: DictConfig) -> List[Callback]:
     callbacks: List[Callback] = []
@@ -129,9 +134,7 @@ def run(cfg: DictConfig):
             **wandb_config,
             tags=cfg.core.tags,
         )
-        hydra.utils.log.info(
-            "W&B is now watching <{cfg.logging.wandb_watch.log}>!"
-        )
+        hydra.utils.log.info("W&B is now watching <{cfg.logging.wandb_watch.log}>!")
         wandb_logger.watch(
             model,
             log=cfg.logging.wandb_watch.log,
@@ -167,6 +170,7 @@ def run(cfg: DictConfig):
     )
     log_hyperparameters(trainer=trainer, model=model, cfg=cfg)
 
+    # model = torch.compile(model)
     hydra.utils.log.info("Starting training!")
     trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt)
 

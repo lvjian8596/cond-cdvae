@@ -88,6 +88,7 @@ def load_model(model_path, load_data=False, testing=True):
         else:
             test_loader = None
 
+    # model = torch.compile(model, mode="reduce-overhead")
     return model, test_loader, cfg
 
 
