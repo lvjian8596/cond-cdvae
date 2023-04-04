@@ -1,4 +1,8 @@
 .vscode/
+.python-version
+log/
+*.ipynb
+data/
 
 # .gitignore defaults for python and pycharm
 .idea

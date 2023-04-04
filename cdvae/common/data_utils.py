@@ -473,7 +473,7 @@ def radius_graph_pbc(
 ):
     """Computes pbc graph edges under pbc.
 
-    topk_per_pair: (num_atom_pairs,), select topk edges per atom pair
+    topk_per_pair: (num_'atom_pairs,), select topk edges per atom pair
 
     Note: topk should take into account self-self edge for (i, i)
     """

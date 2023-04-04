@@ -107,6 +107,20 @@ class CDVAE(BaseModule):
             6,
             self.hparams.lattice_dropout,
         )
+        # ===== split lattice lengths and angles =====
+        # self.fc_lengths = build_mlp(
+        #     self.hparams.latent_dim,
+        #     self.hparams.hidden_dim,
+        #     self.hparams.fc_num_layers,
+        #     3,
+        # )
+        # self.fc_angles = build_mlp(
+        #     self.hparams.latent_dim,
+        #     self.hparams.hidden_dim,
+        #     self.hparams.fc_num_layers,
+        #     3,
+        # )
+        # ============================================
         hydra.utils.log.info("Initializing decoder done")
 
         sigmas = torch.tensor(
@@ -324,7 +338,8 @@ class CDVAE(BaseModule):
         """sample
 
         Args:
-            conditions (dict): {'composition': (atom_types, num_atoms), cond_key: cond_val, ...}
+            conditions (dict):
+                {'composition': (atom_types, num_atoms), cond_key: cond_val, ...}
             ld_kwargs (dict): langevin-dynamics args dict
 
         Returns:
@@ -426,6 +441,11 @@ class CDVAE(BaseModule):
     def predict_lattice(self, z, num_atoms):
         self.lattice_scaler.match_device(z)
         pred_lengths_and_angles = self.fc_lattice(z)  # (N, 6)
+        # ===== split lattice lengths and angles =====
+        # lengths = self.fc_lengths(z)
+        # angles = self.fc_angles(z)
+        # pred_lengths_and_angles = torch.concat([lengths, angles], dim=1)
+        # ============================================
         scaled_preds = self.lattice_scaler.inverse_transform(
             pred_lengths_and_angles
         )

@@ -361,7 +361,7 @@ def main(args):
         )
 
         if args.label == '':
-            gen_out_name = f'eval_gen.pt'
+            gen_out_name = 'eval_gen.pt'
         else:
             gen_out_name = f'eval_gen_{args.label}.pt'
 
@@ -419,8 +419,8 @@ if __name__ == '__main__':
     parser.add_argument('--label', default='')
     parser.add_argument('--formula', help="formula to generate")
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
-    parser.add_argument('--energy_per_atom', default=-1, type=float, help="target prop")
-    parser.add_argument('--energy', default=-1, type=float, help="target prop")
+    parser.add_argument('--energy_per_atom', default=-1., type=float, help="target, -1")
+    parser.add_argument('--energy', default=-1., type=float, help="target, -1")
 
     args = parser.parse_args()
 
