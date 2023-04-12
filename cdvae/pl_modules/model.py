@@ -464,8 +464,10 @@ class CDVAE(BaseModule):
             target_lengths = batch.lengths / batch.num_atoms.view(
                 -1, 1
             ).float() ** (1 / 3)
+        target_angles = batch.angles
+        # target_angles = batch.angles / 180 * np.pi
         target_lengths_and_angles = torch.cat(
-            [target_lengths, batch.angles], dim=-1
+            [target_lengths, target_angles], dim=-1
         )
         target_lengths_and_angles = self.lattice_scaler.transform(
             target_lengths_and_angles

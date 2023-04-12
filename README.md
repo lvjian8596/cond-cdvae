@@ -41,6 +41,19 @@ It has several main functionalities:
 
 ## Installation
 
+### Install with pip
+
+```bash
+pip install torch torchaudio torchvision -i https://download.pytorch.org/whl/cu118
+pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.0+11.8.html
+pip install lightning
+pip install ase black hydra-core matminer matplotlib networkx omegaconf p-tqdm pandas pyarrow
+pip install pymatgen python-dotenv scikit-learn scipy smact sympy tqdm wandb yapf
+pip install -e .
+```
+
+### Install with conda
+
 The easiest way to install prerequisites is via [conda](https://conda.io/docs/index.html).
 
 ### GPU machines

@@ -23,7 +23,8 @@ def get_min_dist(atoms: Atoms) -> float:
 
 if __name__ == '__main__':
     d = sys.argv[1]  # directory containing structure files
-    v_path = Path('valid_c')
+    d = Path(d)
+    v_path = d.parent.joinpath('valid_c')
     v_path.mkdir(exist_ok=True)
     ser_list = []
     for f in Path(d).glob('*.vasp'):
@@ -36,4 +37,4 @@ if __name__ == '__main__':
     print(len(ser_list))
     df = pd.DataFrame(ser_list)
     df = df.sort_values(by='min_dist', ascending=False)
-    df.to_csv('valid_c.txt', index=False, sep='\t')
+    df.to_csv(d.parent.joinpath('valid_c.txt'), index=False, sep='\t')
