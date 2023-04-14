@@ -26,7 +26,10 @@ def res2series(cif):
             elif match := re.match(PRESPAT, line):
                 pres = float(match.group(1))
         else:
-            print(gdp, "NOT MATCH")
+            if pres is None:
+                pres = 0.0
+            else:
+                print(gdp, "NOT MATCH")
     # gulp output file
     got = cif.with_suffix(".got")
     with open(got, "r") as gotf:
