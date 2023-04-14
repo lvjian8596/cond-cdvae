@@ -14,8 +14,8 @@ def get_distances(atoms):
     return d_m[d_m > 0]
 
 
-def valid_Si38(atoms):
-    if len(atoms) != 38:
+def valid_Si100(atoms):
+    if len(atoms) != 100:
         return False
     if any(map(lambda atom: atom.number != 14, atoms)):
         return False
@@ -31,5 +31,5 @@ if __name__ == '__main__':
 
     for f in Path(d).glob('*.vasp'):
         atoms = read(f)
-        if valid_Si38(atoms):
+        if valid_Si100(atoms):
             write(v.joinpath(f.name), atoms)

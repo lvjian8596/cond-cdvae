@@ -9,19 +9,22 @@ omegaconf
 p-tqdm
 pandas
 pyarrow
-pyg
 pymatgen
 python-dotenv
-pytorch
-pytorch-cuda==11.8
-pytorch-lightning
-pytorch-scatter
+torch
+lightning
 scikit-learn
 scipy
 smact
 sympy
 torchaudio
 torchvision
+
+# torch-scatter
+# torch-sparse
+# torch-cluster
+# torch-spline-conv
+# torch_geometric
 tqdm
 wandb
 yapf
