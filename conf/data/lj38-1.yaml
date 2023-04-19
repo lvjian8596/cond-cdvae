@@ -1,23 +1,24 @@
-# root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_20/mp20v1
-root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_20/mp20v2
-prop: formation_energy_per_atom
-num_targets: 1
-# prop: scaled_lattice
-# num_targets: 6
+root_path: ${oc.env:PROJECT_ROOT}/data/LJ38
+prop:
+  - energy
+num_targets: 
+  - 1
 niggli: true
-primitive: False
+primitive: false
 graph_method: crystalnn
 lattice_scale_method: scale_length
-preprocess_workers: 2
+preprocess_workers: 30
 readout: mean
-# max_atoms: 20
 otf_graph: false
-eval_model_name: mp20
+eval_model_name: LJ38
+conditions:
+  - composition
+  - energy
 
 
-train_max_epochs: 1000
+train_max_epochs: 400
 early_stopping_patience: 100000
-teacher_forcing_max_epoch: 500
+teacher_forcing_max_epoch: 200
 
 
 datamodule:
@@ -28,6 +29,8 @@ datamodule:
       _target_: cdvae.pl_data.dataset.CrystDataset
       name: Formation energy train
       path: ${data.root_path}/train.feather
+      save_path: ${data.root_path}/train.pkl  # processed data
+      force_process: false  # force to process <crystal info> and save to <processed data>
       prop: ${data.prop}
       niggli: ${data.niggli}
       primitive: ${data.primitive}
@@ -39,6 +42,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy val
         path: ${data.root_path}/val.feather
+        save_path: ${data.root_path}/val.pkl  # processed data
+        force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -50,6 +55,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy test
         path: ${data.root_path}/test.feather
+        save_path: ${data.root_path}/test.pkl  # processed data
+        force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -63,6 +70,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 256
-    val: 256
-    test: 256
+    train: 128
+    val: 128
+    test: 128

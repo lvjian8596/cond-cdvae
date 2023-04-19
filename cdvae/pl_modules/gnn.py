@@ -1,6 +1,8 @@
 """This module is adapted from https://github.com/Open-Catalyst-Project/ocp/tree/master/ocpmodels/models
 DimeNet++
 """
+import warnings
+from math import sqrt
 
 import hydra
 import omegaconf
@@ -10,7 +12,6 @@ import torch.nn as nn
 from torch_geometric.nn.inits import glorot_orthogonal
 from torch_geometric.nn.models.dimenet import (
     BesselBasisLayer,
-    EmbeddingBlock,
     ResidualLayer,
     SphericalBasisLayer,
 )
@@ -23,12 +24,50 @@ from cdvae.common.data_utils import (
     radius_graph_pbc_wrapper,
 )
 from cdvae.common.utils import PROJECT_ROOT
+from cdvae.pl_modules.conditioning import AtomwiseConditioning
+from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.gemnet import GemNetT
+from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
 
 try:
     import sympy as sym
 except ImportError:
     sym = None
+
+
+class ScaledSiLU(nn.Module):
+    def __init__(self, factor=1):
+        super().__init__()
+        self.scale_factor = factor
+        self._activation = nn.SiLU()
+
+    def forward(self, x):
+        return self._activation(x) * self.scale_factor
+
+
+class EmbeddingBlock(nn.Module):
+    """Modified EmbeddingBlock
+
+    concatenate [xi, xj, rbf]
+    """
+
+    def __init__(self, num_radial, hidden_channels, act=nn.SiLU()):
+        super().__init__()
+        self.hidden_channels = hidden_channels
+        self.act = act
+
+        self.lin_rbf = nn.Linear(num_radial, hidden_channels)
+        self.lin = nn.Linear(3 * hidden_channels, hidden_channels)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.lin_rbf.reset_parameters()
+        self.lin.reset_parameters()
+
+    def forward(self, x, rbf, i, j):
+        rbf = self.act(self.lin_rbf(rbf))
+        return self.act(self.lin(torch.cat([x[i], x[j], rbf], dim=-1)))
 
 
 class InteractionPPBlock(torch.nn.Module):
@@ -41,7 +80,7 @@ class InteractionPPBlock(torch.nn.Module):
         num_radial,
         num_before_skip,
         num_after_skip,
-        act=nn.SiLU(),
+        act=ScaledSiLU(1),
     ):
         super(InteractionPPBlock, self).__init__()
         self.act = act
@@ -190,21 +229,22 @@ class DimeNetPlusPlus(torch.nn.Module):
         num_output_layers: (int, optional): Number of linear layers for the
             output blocks. (default: :obj:`3`)
         act: (function, optional): The activation funtion.
-            (default: :obj:`swish`)
+            (default: :obj:`swish`, nn.SiLU)
     """
 
     url = "https://github.com/klicperajo/dimenet/raw/master/pretrained"
 
     def __init__(
         self,
-        hidden_channels,
-        out_channels,
-        num_blocks,
-        int_emb_size,
-        basis_emb_size,
-        out_emb_channels,
-        num_spherical,
-        num_radial,
+        out_channels,  # output dim, num_targets
+        cond_dim=128,  # condition vec dim
+        hidden_channels=128,  # internal dim
+        num_blocks=4,
+        int_emb_size=64,
+        basis_emb_size=8,
+        out_emb_channels=256,
+        num_spherical=7,
+        num_radial=6,
         cutoff=5.0,
         envelope_exponent=5,
         num_before_skip=1,
@@ -222,11 +262,12 @@ class DimeNetPlusPlus(torch.nn.Module):
         self.num_blocks = num_blocks
 
         self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)
-        print("Initializing SphericalBasisLayer ...")
         self.sbf = SphericalBasisLayer(  # require a lot of init time
             num_spherical, num_radial, cutoff, envelope_exponent
         )
 
+        self.atomemb = AtomEmbedding(hidden_channels)
+        self.atomwisecond = AtomwiseConditioning(cond_dim, hidden_channels)
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
         self.output_blocks = torch.nn.ModuleList(
@@ -303,6 +344,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
     def __init__(
         self,
         num_targets,
+        cond_dim=128,
         hidden_channels=128,
         num_blocks=4,
         int_emb_size=64,
@@ -327,8 +369,9 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         self.readout = readout
 
         super(DimeNetPlusPlusWrap, self).__init__(
-            hidden_channels=hidden_channels,
             out_channels=num_targets,
+            cond_dim=cond_dim,
+            hidden_channels=hidden_channels,
             num_blocks=num_blocks,
             int_emb_size=int_emb_size,
             basis_emb_size=basis_emb_size,
@@ -342,7 +385,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
             num_output_layers=num_output_layers,
         )
 
-    def forward(self, data):
+    def forward(self, data, cond_vec=None):
         batch = data.batch
 
         if self.otf_graph:  # compute new graph data
@@ -394,7 +437,11 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         sbf = self.sbf(dist, angle, idx_kj)
 
         # Embedding block.
-        x = self.emb(data.atom_types.long(), rbf, i, j)
+        if cond_vec is not None:
+            x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
+        else:
+            x = self.atomemb(data.atom_tyles.long())
+        x = self.emb(x, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 
         # Interaction blocks.
@@ -403,6 +450,8 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         ):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
             P += output_block(x, rbf, i, num_nodes=pos.size(0))
+            assert torch.isfinite(x).all(), f"explosion in Interaction"
+            assert torch.isfinite(P).all(), f"explosion in Interaction"
 
         # Use mean
         if batch is None:
@@ -420,6 +469,9 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         else:
             # TODO: if want to use cat, need two lines here
             energy = scatter(P, batch, dim=0, reduce=self.readout)
+
+        if energy.max() > 100:
+            warnings.warn("DimeNet++ output too large, may overflow!")
 
         return energy
 
@@ -472,24 +524,3 @@ class GemNetTEncoder(nn.Module):
             num_bonds=data.num_bonds,
         )
         return output
-
-
-@hydra.main(config_path=str(PROJECT_ROOT / "conf"), config_name="default")
-def main(cfg: omegaconf.DictConfig):
-    # -----------------
-    datamodule: pl.LightningDataModule = hydra.utils.instantiate(
-        cfg.data.datamodule, _recursive_=False
-    )
-    datamodule.setup('fit')
-    batch0 = next(iter(datamodule.train_dataloader()))
-    print(batch0)
-    # DimeNet++ Wrap
-    encoder = hydra.utils.instantiate(cfg.model.encoder, num_targets=4)
-    # for name, parms in encoder.named_parameters():
-    #     print(torch.mean(parms), torch.std(parms))
-    hidden = encoder(batch0)
-    print(torch.mean(hidden))
-
-
-if __name__ == '__main__':
-    main()

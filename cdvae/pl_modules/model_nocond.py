@@ -22,7 +22,6 @@ from cdvae.common.data_utils import (
 )
 from cdvae.common.utils import PROJECT_ROOT
 from cdvae.pl_modules.basic_blocks import build_mlp
-from cdvae.pl_modules.conditioning import AggregateConditioning, MultiEmbedding
 from cdvae.pl_modules.decoder import GemNetTDecoder
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gnn import DimeNetPlusPlusWrap
@@ -75,18 +74,9 @@ class CDVAE(BaseModule):
         super().__init__(*args, **kwargs)
 
         hydra.utils.log.info("Initializing encoder ...")
-        self.multiemb: MultiEmbedding = hydra.utils.instantiate(
-            self.hparams.conditions,
-            _recursive_=False,
-        )
         self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
             self.hparams.encoder,
             num_targets=self.hparams.latent_dim,
-            cond_dim=self.hparams.conditions.cond_dim,
-        )
-        self.agg_cond = AggregateConditioning(
-            self.hparams.conditions.cond_dim,
-            self.hparams.latent_dim,
         )
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         self.fc_var = nn.Linear(
@@ -269,7 +259,6 @@ class CDVAE(BaseModule):
             self.sigmas,
             total=self.sigmas.size(0),
             disable=ld_kwargs.disable_bar,
-            ncols=79
         ):
             if sigma < ld_kwargs.min_sigma:
                 break
@@ -352,29 +341,22 @@ class CDVAE(BaseModule):
             num_samples, self.hparams.hidden_dim, device=self.device
         )
         # cond z
-        cond_vec = self.multiemb(conditions)
-        cond_z = self.agg_cond(cond_vec, z)
         samples = self.langevin_dynamics(
-            cond_z, ld_kwargs, gt_num_atoms, gt_atom_types
+            z, ld_kwargs, gt_num_atoms, gt_atom_types
         )
         return samples
 
     def forward(self, batch, teacher_forcing=False, training=True):
-        # conditional z
-        conditions = self.build_conditions(batch)
-        cond_vec = self.multiemb(conditions)
-
         # hacky way to resolve the NaN issue. Will need more careful debugging later.
-        mu, log_var, z = self.encode(batch, cond_vec)
+        mu, log_var, z = self.encode(batch)
         assert torch.isfinite(z).all()
 
         # z (B, lattent_dim)
-        cond_z = self.agg_cond(cond_vec, z)
 
         # pred lattice from cond_z
         # (B, 6)                 (B, 3)        (B, 3)
         pred_lengths_and_angles, pred_lengths, pred_angles = self.decode_stats(
-            cond_z,
+            z,
             batch.num_atoms,
             batch.lengths,
             batch.angles,
@@ -409,7 +391,7 @@ class CDVAE(BaseModule):
         )
 
         pred_cart_coord_diff, _ = self.decoder(
-            cond_z,
+            z,
             noisy_frac_coords,
             batch.atom_types,
             batch.num_atoms,

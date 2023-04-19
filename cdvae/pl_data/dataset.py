@@ -25,7 +25,7 @@ class CrystDataset(Dataset):
         path: ValueNode,  # original crystal info
         save_path: ValueNode,  # processed graph data
         force_process: ValueNode,  # process or load
-        prop: ValueNode,
+        prop: ValueNode,  # list
         niggli: ValueNode,
         primitive: ValueNode,
         graph_method: ValueNode,
@@ -45,34 +45,37 @@ class CrystDataset(Dataset):
         self.lattice_scale_method = lattice_scale_method
 
         if self.force_process or not Path(self.save_path).exists():
+            hydra.utils.log.info(f"Dumping into {self.save_path} ...")
             self.cached_data = preprocess(
                 self.path,
                 preprocess_workers,
                 niggli=self.niggli,
                 primitive=self.primitive,
                 graph_method=self.graph_method,
-                prop_list=[prop],
+                prop_list=prop,
             )
-            print(f"Dump into {self.save_path} ...")
             pickle.dump(self.cached_data, open(self.save_path, 'wb'))
         else:
-            print(f"Load from {self.save_path} ...")
+            hydra.utils.log.info(f"Loading from {self.save_path} ...")
             self.cached_data = pickle.load(open(self.save_path, 'rb'))
 
         add_scaled_lattice_prop(self.cached_data, lattice_scale_method)
         self.lattice_scaler = None
-        self.scaler = None
+        self.prop_scalers: list = None  # list of prop_scaler
 
     def __len__(self) -> int:
         return len(self.cached_data)
 
     def __getitem__(self, index) -> Data:
         data_dict = self.cached_data[index]
+        # {'mp_id', 'cif', 'graph_array' **prop}
 
         # scaler is set in DataModule set stage
-        # if (self.lattice_scaler is None) or (self.scaler is None):
-        #     raise ValueError("Scaler should be set before used")
-        prop = self.scaler.transform(torch.tensor(data_dict[self.prop]))
+        p_dict = {
+            p: prop_scaler.transform(torch.tensor(data_dict[p]).view(1, -1))
+            for p, prop_scaler in zip(self.prop, self.prop_scalers, strict=True)
+        }
+
         (
             frac_coords,
             atom_types,
@@ -96,8 +99,10 @@ class CrystDataset(Dataset):
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
-            num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
-            y=prop.view(1, -1),
+            num_nodes=
+            num_atoms,  # special attribute used for batching in pytorch geometric
+            mp_id=data_dict['mp_id'],
+            **p_dict,
         )
         return data
 
@@ -158,46 +163,14 @@ class TensorCrystDataset(Dataset):
             lengths=torch.Tensor(lengths).view(1, -1),
             angles=torch.Tensor(angles).view(1, -1),
             edge_index=torch.LongTensor(
-                edge_indices.T
-            ).contiguous(),  # shape (2, num_edges)
+                edge_indices.T).contiguous(),  # shape (2, num_edges)
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
-            num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
+            num_nodes=
+            num_atoms,  # special attribute used for batching in pytorch geometric
         )
         return data
 
     def __repr__(self) -> str:
         return f"TensorCrystDataset(len: {len(self.cached_data)})"
-
-
-@hydra.main(config_path=str(PROJECT_ROOT / "conf"), config_name="default")
-def main(cfg: omegaconf.DictConfig):
-    from torch_geometric.data import Batch
-
-    from cdvae.common.data_utils import get_scaler_from_data_list
-
-    dataset: CrystDataset = hydra.utils.instantiate(
-        cfg.data.datamodule.datasets.train, _recursive_=False
-    )
-    lattice_scaler = get_scaler_from_data_list(
-        dataset.cached_data, key='scaled_lattice'
-    )
-    scaler = get_scaler_from_data_list(dataset.cached_data, key=dataset.prop)
-    dataset.lattice_scaler = lattice_scaler
-    dataset.scaler = scaler
-    print(dataset)
-    # -----------
-    # print(dataset.lattice_scaler)
-    # print(dataset.scaler)
-    # print(dataset[0])
-    # print(dataset[0].edge_index)
-    # print(dataset[0].atom_types)
-
-    data_list = [dataset[i] for i in range(len(dataset))]
-    batch = Batch.from_data_list(data_list)
-    return batch
-
-
-if __name__ == "__main__":
-    main()

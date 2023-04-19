@@ -1,4 +1,4 @@
-project: cdvae
+project: comp_cond_crystal_gen
 group: test
 expname: test
 
@@ -18,12 +18,14 @@ hydra:
     subdir: ${hydra.job.num}_${hydra.job.id}
 
   job:
+    chdir: true
     env_set:
       WANDB_START_METHOD: thread
-      WANDB_DIR: ${oc.env:WABDB_DIR}
+      WANDB_DIR: ${oc.env:WANDB_DIR}
 
 defaults:
-  - data: default
+  - _self_
+  - data: ???
   - logging: default
   - model: vae
   - optim: default

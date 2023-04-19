@@ -1,0 +1,30 @@
+ase
+black
+hydra-core
+matminer
+matplotlib
+networkx
+numpy
+omegaconf
+p-tqdm
+pandas
+pyarrow
+pymatgen
+python-dotenv
+torch
+lightning
+scikit-learn
+scipy
+smact
+sympy
+torchaudio
+torchvision
+
+# torch-scatter
+# torch-sparse
+# torch-cluster
+# torch-spline-conv
+# torch_geometric
+tqdm
+wandb
+yapf

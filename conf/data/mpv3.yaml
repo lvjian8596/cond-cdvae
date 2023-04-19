@@ -1,23 +1,23 @@
-# root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_20/mp20v1
-root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_20/mp20v2
-prop: formation_energy_per_atom
-num_targets: 1
-# prop: scaled_lattice
-# num_targets: 6
+root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mpv3
+prop:
+  - formation_energy_per_atom
+num_targets:
+  - 1
 niggli: true
 primitive: False
 graph_method: crystalnn
 lattice_scale_method: scale_length
-preprocess_workers: 2
+preprocess_workers: 30
 readout: mean
-# max_atoms: 20
 otf_graph: false
-eval_model_name: mp20
+eval_model_name: mpv3
+conditions:
+  - composition
 
 
-train_max_epochs: 1000
+train_max_epochs: 500
 early_stopping_patience: 100000
-teacher_forcing_max_epoch: 500
+teacher_forcing_max_epoch: 200
 
 
 datamodule:
@@ -27,7 +27,9 @@ datamodule:
     train:
       _target_: cdvae.pl_data.dataset.CrystDataset
       name: Formation energy train
-      path: ${data.root_path}/train.feather
+      path: ${data.root_path}/train.feather  # crystal info
+      save_path: ${data.root_path}/train.pkl  # processed data
+      force_process: false  # force to process <crystal info> and save to <processed data>
       prop: ${data.prop}
       niggli: ${data.niggli}
       primitive: ${data.primitive}
@@ -39,6 +41,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy val
         path: ${data.root_path}/val.feather
+        save_path: ${data.root_path}/val.pkl  # path of processed data
+        force_process: false # force to preprocess and save again or not
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -50,6 +54,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy test
         path: ${data.root_path}/test.feather
+        save_path: ${data.root_path}/test.pkl  # path of processed data
+        force_process: false  # force to preprocess and save again or not
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -63,6 +69,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 256
-    val: 256
-    test: 256
+    train: 64
+    val: 64
+    test: 64

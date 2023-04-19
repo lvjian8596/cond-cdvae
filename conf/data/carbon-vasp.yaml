@@ -1,23 +1,27 @@
-# root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_20/mp20v1
-root_path: ${oc.env:PROJECT_ROOT}/data/MaterialsProject/mp_20/mp20v2
-prop: formation_energy_per_atom
-num_targets: 1
+root_path: ${oc.env:PROJECT_ROOT}/data/carbon_24/Vasp
+prop:
+  - energy_per_atom
+num_targets: 
+  - 1
 # prop: scaled_lattice
 # num_targets: 6
 niggli: true
-primitive: False
+primitive: false
 graph_method: crystalnn
 lattice_scale_method: scale_length
-preprocess_workers: 2
+preprocess_workers: 30
 readout: mean
-# max_atoms: 20
+# max_atoms: 24
 otf_graph: false
-eval_model_name: mp20
+eval_model_name: carbon
+conditions:
+  - composition
+  - energy_per_atom
 
 
-train_max_epochs: 1000
+train_max_epochs: 2000
 early_stopping_patience: 100000
-teacher_forcing_max_epoch: 500
+teacher_forcing_max_epoch: 250
 
 
 datamodule:
@@ -28,6 +32,8 @@ datamodule:
       _target_: cdvae.pl_data.dataset.CrystDataset
       name: Formation energy train
       path: ${data.root_path}/train.feather
+      save_path: ${data.root_path}/train.pkl  # processed data
+      force_process: false  # force to process <crystal info> and save to <processed data>
       prop: ${data.prop}
       niggli: ${data.niggli}
       primitive: ${data.primitive}
@@ -39,6 +45,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy val
         path: ${data.root_path}/val.feather
+        save_path: ${data.root_path}/val.pkl  # processed data
+        force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -50,6 +58,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy test
         path: ${data.root_path}/test.feather
+        save_path: ${data.root_path}/test.pkl  # processed data
+        force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}

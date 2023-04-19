@@ -1,4 +1,4 @@
-_target_: cdvae.pl_modules.model.CDVAE
+_target_: cdvae.pl_modules.model_nocond.CDVAE
 hidden_dim: 256
 latent_dim: 256
 fc_num_layers: 1

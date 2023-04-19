@@ -1,4 +1,4 @@
-root_path: ${oc.env:PROJECT_ROOT}/data/mp_20
+root_path: ${oc.env:PROJECT_ROOT}/data/mp_20_old
 prop: formation_energy_per_atom
 num_targets: 1
 # prop: scaled_lattice
@@ -9,7 +9,7 @@ graph_method: crystalnn
 lattice_scale_method: scale_length
 preprocess_workers: 30
 readout: mean
-max_atoms: 20
+# max_atoms: 20
 otf_graph: false
 eval_model_name: mp20
 
@@ -27,6 +27,8 @@ datamodule:
       _target_: cdvae.pl_data.dataset.CrystDataset
       name: Formation energy train
       path: ${data.root_path}/train.csv
+      save_path: ${data.root_path}/train.pkl  # processed data
+      force_process: false  # force to process <crystal info> and save to <processed data>
       prop: ${data.prop}
       niggli: ${data.niggli}
       primitive: ${data.primitive}
@@ -38,6 +40,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy val
         path: ${data.root_path}/val.csv
+        save_path: ${data.root_path}/val.pkl  # processed data
+        force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
@@ -49,6 +53,8 @@ datamodule:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy test
         path: ${data.root_path}/test.csv
+        save_path: ${data.root_path}/test.pkl  # processed data
+        force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
         niggli: ${data.niggli}
         primitive: ${data.primitive}
