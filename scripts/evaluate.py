@@ -140,8 +140,8 @@ def generation(
             specified_atom_types = get_atom_types(comp)
             sampled_num_atoms = [len(specified_atom_types)] * batch_size  # (B,)
             sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
-            sampled_atom_types = specified_atom_types * batch_size  # (Nnode,)
-            sampled_atom_types = torch.tensor(sampled_atom_types, device=model.device)
+            sampled_atom_types = specified_atom_types.tile(batch_size)  # (Nnode,)
+            sampled_atom_types = sampled_atom_types.float().to(model.device)
         elif train_data is not None:  # load cached data
             cached_data = pickle.load(open(train_data, 'rb'))
 
