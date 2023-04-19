@@ -54,7 +54,7 @@ def atoms2gulp(f, outdir, keywords, prange, nsample, maxcyc, lib, options):
 @click.argument("files", nargs=-1)  #, help="input files (*.cif, *.vasp, ...)")
 @click.option("-j", "--jobs", default=10, type=int, help="max parllel jobs, default 10")
 @click.option("-o", "--outdir", default="rungulp", help="out-directory, defualt rungulp")  # fmt: skip
-@click.option("-k", "--keywords", multiple=True, default=("opti", "conjugate", "conp"), help="keywords, default opti conjugate conp")  # fmt: skip
+@click.option("-k", "--keywords", multiple=True, default=("opti", "conjugate", "conp", "stress_out"), help="keywords, default opti conjugate conp stress_out")  # fmt: skip
 @click.option("-p", "--prange", nargs=2, default=(0, 0), type=float, help="pressure range, default 0 0 (GPa)")  # fmt: skip
 @click.option("-n", "--nsample", default=1, type=int, help="number of sample in prange, default 1")  # fmt: skip
 @click.option("-l", "--lib", default="edip_marks.lib", help="library, won't write if given 'None', default edip_marks.lib") # fmt:# fmt: skip
