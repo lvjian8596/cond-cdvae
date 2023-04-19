@@ -27,7 +27,7 @@ defaults:
   - _self_
   - data: ???
   - logging: default
-  - model: vae
+  - model: cvae
   - optim: default
   - train: default
 #    Decomment this parameter to get parallel job running

@@ -104,7 +104,7 @@ class TestConditioning(unittest.TestCase):
             (self.nnodes, self.cfg.model.encoder.hidden_channels),
         )
 
-    def test_05_model(self):
+    def test_05_model_and_gen_shape(self):
         model: pl.LightningModule = hydra.utils.instantiate(
             self.cfg.model,
             optim=self.cfg.optim,

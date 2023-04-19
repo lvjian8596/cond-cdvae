@@ -16,20 +16,6 @@ class TestModel(unittest.TestCase):
                                          config_dir=str(PROJECT_ROOT / "conf")):
             self.cfg = hydra.compose(config_name="default",
                                      overrides=["data=carbon"])
-            # self.datamodule: pl.LightningDataModule = hydra.utils.instantiate(
-            #     self.cfg.data.datamodule, _recursive_=False)
-            # self.batch = next(iter(self.datamodule.train_dataloader()))
-
-            # self.B = self.cfg.data.datamodule.batch_size.train
-            # self.cond_dim = self.cfg.model.conditions.cond_dim
-            # self.latent_dim = self.cfg.model.latent_dim
-
-            # self.nnodes = self.batch.batch.shape[0]
-            # self.conditions = {
-            #     'composition': (self.batch.atom_types, self.batch.num_atoms),
-            #     'energy_per_atom': self.batch.energy_per_atom,
-            # }
-            # self.latent = torch.randn(self.B, self.latent_dim)
 
     def tearDown(self):
         pass

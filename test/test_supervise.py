@@ -20,6 +20,7 @@ class TestSupervise(unittest.TestCase):
     def tearDown(self):
         pass
 
+    @unittest.skip("")
     def test_01_supervise(self):
         pass
 
