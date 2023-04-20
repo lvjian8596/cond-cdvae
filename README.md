@@ -111,6 +111,18 @@ To train a CDVAE, run the following command:
 python cdvae/run.py data=perov expname=perov
 ```
 
+```bash
+python cdvae/run.py \
+    model=vae/vae_nocond \  # vae is default
+    project=... group=... expname=... \
+    data=... \
+    optim.optimizer.lr=1e-7 optim.lr_scheduler.min_lr=1e-7 \
+    data.teacher_forcing_max_epoch=250 data.train_max_epochs=4000 \
+    model.beta=0.01 \
+    model.fc_num_layers=1 model.latent_dim=... model.hidden_dim=... model.lattice_dropout=... \  # MLP part
+    model.hidden_dim=... model.latent_dim=... [model.conditions.cond_dim=...] \
+```
+
 To use other datasets, use `data=carbon` and `data=mp_20` instead. CDVAE uses [hydra](https://hydra.cc) to configure hyperparameters, and users can modify them with the command line or configure files in `conf/` folder.
 
 After training, model checkpoints can be found in `$HYDRA_JOBS/singlerun/YYYY-MM-DD/expname`.
