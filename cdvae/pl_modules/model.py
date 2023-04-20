@@ -195,7 +195,6 @@ class CDVAE(BaseModule):
         detact_overflow(mu, 100, batch, "mu")
         detact_overflow(log_var, 100, batch, "log_var")
 
-        mu = self.fc_mu(hidden)
         z = self.reparameterize(mu, log_var)
         return mu, log_var, z
 
