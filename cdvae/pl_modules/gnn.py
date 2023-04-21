@@ -440,7 +440,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         if cond_vec is not None:
             x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
         else:
-            x = self.atomemb(data.atom_tyles.long())
+            x = self.atomemb(data.atom_types.long())
         x = self.emb(x, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 

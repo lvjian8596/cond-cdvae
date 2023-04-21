@@ -847,6 +847,7 @@ def preprocess(
         [graph_method] * len(df),
         [prop_list] * len(df),
         num_cpus=num_workers,
+        ncols=79,
     )
 
     mpid_to_results = {result['mp_id']: result for result in unordered_results}
@@ -886,6 +887,7 @@ def preprocess_tensors(crystal_array_list, niggli, primitive, graph_method):
         [primitive] * len(crystal_array_list),
         [graph_method] * len(crystal_array_list),
         num_cpus=30,
+        ncols=79,
     )
     ordered_results = list(
         sorted(unordered_results, key=lambda x: x['batch_idx'])

@@ -1,27 +1,24 @@
-root_path: ${oc.env:PROJECT_ROOT}/data/carbon_24
+root_path: ${oc.env:HOME}/Data/ljcluster/lj100/v2/rand20000
 prop:
   - energy_per_atom
 num_targets: 
   - 1
-# prop: scaled_lattice
-# num_targets: 6
 niggli: true
 primitive: false
 graph_method: crystalnn
 lattice_scale_method: scale_length
-preprocess_workers: 30
+preprocess_workers: 100
 readout: mean
-max_atoms: 24
 otf_graph: false
-eval_model_name: carbon
+eval_model_name: lj100
 conditions:
   - composition
   - energy_per_atom
 
 
-train_max_epochs: 2000
+train_max_epochs: 1000
 early_stopping_patience: 100000
-teacher_forcing_max_epoch: 250
+teacher_forcing_max_epoch: 500
 
 
 datamodule:
@@ -31,7 +28,7 @@ datamodule:
     train:
       _target_: cdvae.pl_data.dataset.CrystDataset
       name: Formation energy train
-      path: ${data.root_path}/train.csv
+      path: ${data.root_path}/train.feather
       save_path: ${data.root_path}/train.pkl  # processed data
       force_process: false  # force to process <crystal info> and save to <processed data>
       prop: ${data.prop}
@@ -44,7 +41,7 @@ datamodule:
     val:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy val
-        path: ${data.root_path}/val.csv
+        path: ${data.root_path}/val.feather
         save_path: ${data.root_path}/val.pkl  # processed data
         force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
@@ -57,7 +54,7 @@ datamodule:
     test:
       - _target_: cdvae.pl_data.dataset.CrystDataset
         name: Formation energy test
-        path: ${data.root_path}/test.csv
+        path: ${data.root_path}/test.feather
         save_path: ${data.root_path}/test.pkl  # processed data
         force_process: false  # force to process <crystal info> and save to <processed data>
         prop: ${data.prop}
@@ -73,6 +70,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 256
-    val: 256
-    test: 256
+    train: 128
+    val: 128
+    test: 128

@@ -2,6 +2,8 @@ _target_: cdvae.pl_modules.model_nocond.CDVAE
 hidden_dim: 256
 latent_dim: 256
 fc_num_layers: 1
+# max_atoms for non-condition model
+max_atoms: ${data.max_atoms}
 lattice_dropout: 0.2
 cost_natom: 1.
 cost_coord: 10.
