@@ -25,9 +25,8 @@ It has several main functionalities:
 - [Crystal Diffusion Variational AutoEncoder](#crystal-diffusion-variational-autoencoder)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
-    - [GPU machines](#gpu-machines)
-    - [Faster conda installation](#faster-conda-installation)
-    - [CPU-only machines](#cpu-only-machines)
+    - [Install with pip](#install-with-pip)
+    - [Install with conda](#install-with-conda)
     - [Setting up environment variables](#setting-up-environment-variables)
   - [Datasets](#datasets)
   - [Training CDVAE](#training-cdvae)
@@ -43,10 +42,16 @@ It has several main functionalities:
 
 ### Install with pip
 
+CUDA11.8
+
+It is suggested to use `conda` (by [conda](https://conda.io/docs/index.html) or [miniconda](https://docs.conda.io/en/latest/miniconda.html))
+to create a python3.10 environment first,
+then run the following `pip` commands in this environment.
+
 ```bash
 pip install torch torchaudio torchvision -i https://download.pytorch.org/whl/cu118
-pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.0+11.8.html
-pip install lightning
+pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.0+cu118.html
+pip install lightning torch_geometric
 pip install ase black hydra-core matminer matplotlib networkx omegaconf p-tqdm pandas pyarrow
 pip install pymatgen python-dotenv scikit-learn scipy smact sympy tqdm wandb yapf
 pip install -e .
@@ -54,46 +59,28 @@ pip install -e .
 
 ### Install with conda
 
+CUDA11.7
+
 The easiest way to install prerequisites is via [conda](https://conda.io/docs/index.html).
 
-### GPU machines
-
-Run the following command to install the environment:
 ```bash
-conda env create -f env.yml
-```
-Activate the conda environment with `conda activate cdvae`.
-
-Install this package with `pip install -e .`.
-
-### Faster conda installation
-
-We've noticed that the above command to install the dependencies from `env.yml` can take very long. A faster way to install the required packages is:
-```bash
-conda env create -f env_sub.yml
-conda activate cdvae
-conda install ipywidgets jupyterlab matplotlib pylint
-conda install -c conda-forge matminer=0.7.3 nglview pymatgen=2020.12.31
-# Downgrade to fix a known issue with pytorch
-python3 -m pip install setuptools==59.5.0
-pip install -e .
-```
-
-### CPU-only machines
-
-```bash
-conda env create -f env.cpu.yml
-conda activate cdvae
+conda env create -f environment-v2.yaml
 pip install -e .
 ```
 
 ### Setting up environment variables
 
-Make a copy of the `.env.template` file and rename it to `.env`. Modify the following environment variables in `.env`.
+Modify the following environment variables in file `.env`.
 
 - `PROJECT_ROOT`: path to the folder that contains this repo
 - `HYDRA_JOBS`: path to a folder to store hydra outputs
-- `WABDB`: path to a folder to store wabdb outputs
+- `WANDB`: path to a folder to store wandb outputs
+
+```env
+PROJECT_ROOT="/home/..."
+HYDRA_JOBS="/home/..."
+WANDB="/home/..."
+```
 
 ## Datasets
 
@@ -107,10 +94,6 @@ Find more about these datasets by going to our [Datasets](data/) page.
 
 To train a CDVAE, run the following command:
 
-```
-python cdvae/run.py data=perov expname=perov
-```
-
 ```bash
 python cdvae/run.py \
     model=vae/vae_nocond \  # vae is default
@@ -119,30 +102,33 @@ python cdvae/run.py \
     optim.optimizer.lr=1e-7 optim.lr_scheduler.min_lr=1e-7 \
     data.teacher_forcing_max_epoch=250 data.train_max_epochs=4000 \
     model.beta=0.01 \
-    model.fc_num_layers=1 model.latent_dim=... model.hidden_dim=... model.lattice_dropout=... \  # MLP part
-    model.hidden_dim=... model.latent_dim=... [model.conditions.cond_dim=...] \
+    model.fc_num_layers=1 model.latent_dim=... 
+    model.hidden_dim=... model.lattice_dropout=... \  # MLP part
+    model.hidden_dim=... model.latent_dim=... \
+    [model.conditions.cond_dim=...] \
 ```
 
-To use other datasets, use `data=carbon` and `data=mp_20` instead. CDVAE uses [hydra](https://hydra.cc) to configure hyperparameters, and users can modify them with the command line or configure files in `conf/` folder.
+To use other datasets, use `data=carbon` and `data=mp_20` instead.
+CDVAE uses [hydra](https://hydra.cc) to configure hyperparameters, and users can
+modify them with the command line or configure files in `conf/` folder.
 
-After training, model checkpoints can be found in `$HYDRA_JOBS/singlerun/YYYY-MM-DD/expname`.
-
-### Training with a property predictor
-
-Users can also additionally train an MLP property predictor on the latent space, which is needed for the property optimization task:
-
-```
-python cdvae/run.py data=perov expname=perov model.predict_property=True
-```
-
-The name of the predicted propery is defined in `data.prop`, as in `conf/data/perov.yaml` for Perov-5.
+After training, model checkpoints can be found in `$HYDRA_JOBS/singlerun/project/group/expname`.
 
 ## Generating materials
 
-To generate materials, run the following command:
+To generate materials, run recon first:
 
+```bash
+python scripts/evaluate.py --model_path MODEL_PATH --tasks recon
 ```
-python scripts/evaluate.py --model_path MODEL_PATH --tasks recon gen opt
+
+then
+
+```bash
+python scripts/evaluate.py --model_path MODEL_PATH --tasks gen \
+    [--formula=H2O/--train_data=*.pkl] \  # if composition condition
+    [--energy=-1/--energy_per_atom=-1] \  # if energy condition
+    --batch_size=50
 ```
 
 `MODEL_PATH` will be the path to the trained model. Users can choose one or several of the 3 tasks:
