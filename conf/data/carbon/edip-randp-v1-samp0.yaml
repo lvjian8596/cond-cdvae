@@ -11,7 +11,7 @@ graph_method: crystalnn
 lattice_scale_method: scale_length
 preprocess_workers: 30
 readout: mean
-# max_atoms: 24
+max_atoms: 24
 otf_graph: false
 eval_model_name: carbon
 conditions:
@@ -73,6 +73,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 1024
-    val: 1024
-    test: 1024
+    train: 128
+    val: 128
+    test: 128
