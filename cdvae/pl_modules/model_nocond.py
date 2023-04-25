@@ -391,7 +391,7 @@ class CDVAE(BaseModule):
         pred_cart_coord_diff, pred_atom_types = self.decoder(
             z,
             noisy_frac_coords,
-            batch.atom_types,
+            rand_atom_types,
             batch.num_atoms,
             pred_lengths,
             pred_angles,
