@@ -140,7 +140,7 @@ class RecEval(object):
 
 class GenEval(object):
 
-    def __init__(self, pred_crys, gt_crys, n_samples=1000, eval_model_name=None):
+    def __init__(self, pred_crys, gt_crys, n_samples=500, eval_model_name=None):
         self.crys = pred_crys
         self.gt_crys = gt_crys
         self.n_samples = n_samples
