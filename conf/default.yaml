@@ -6,11 +6,10 @@ expname: test
 core:
   version: 0.0.1
   tags:
-    - ${now:%Y-%m-%d}
+    - ${model._target_}
 
 hydra:
   run:
-    # dir: ${oc.env:HYDRA_JOBS}/singlerun/${now:%Y-%m-%d}/${expname}/
     dir: ${oc.env:HYDRA_JOBS}/singlerun/${project}/${group}/${expname}/
 
   sweep:
@@ -21,7 +20,8 @@ hydra:
     chdir: true
     env_set:
       WANDB_START_METHOD: thread
-      WANDB_DIR: ${oc.env:WANDB_DIR}
+      # use subdir in running dir, so that git status can be logged
+      # WANDB_DIR: ${oc.env:WANDB_DIR}
 
 defaults:
   - _self_

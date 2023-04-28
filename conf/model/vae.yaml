@@ -27,6 +27,7 @@ defaults:
 
 conditions:
   _target_: cdvae.pl_modules.conditioning.MultiEmbedding
+  mode: concat
   cond_keys: ${data.conditions}
   hidden_dim: 128
   fc_num_layers: 3

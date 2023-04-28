@@ -15,7 +15,7 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
-from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.plugins.precision import MixedPrecisionPlugin
 
 from cdvae.common.utils import PROJECT_ROOT, log_hyperparameters
@@ -174,8 +174,9 @@ def run(cfg: DictConfig):
     hydra.utils.log.info("Starting training!")
     trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt)
 
-    hydra.utils.log.info("Starting testing!")
-    trainer.test(datamodule=datamodule)
+    if not cfg.train.pl_trainer.fast_dev_run:
+        hydra.utils.log.info("Starting testing!")
+        trainer.test(datamodule=datamodule)
 
     # Logger closing to release resources/avoid multi-run conflicts
     if wandb_logger is not None:

@@ -138,7 +138,7 @@ def generation(
             cached_data = pickle.load(open(train_data, 'rb'))
 
             comp_counts = dict(
-                Counter(  
+                Counter(
                     Composition(dict(Counter(sample["graph_arrays"][1])))
                     for sample in cached_data  # [atomic_number list]
                 )
@@ -346,6 +346,7 @@ def main(args):
             **{
                 'energy_per_atom': args.energy_per_atom,
                 'energy': args.energy,
+                'pressure': args.pressure,
             },
         )
 
@@ -409,9 +410,13 @@ if __name__ == '__main__':
     parser.add_argument('--formula', help="formula to generate")
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     parser.add_argument(
-        '--energy_per_atom', default=-1.0, type=float, help="target, -1"
+        '--placeholder',
+        help="The above are relative target to std value."
+        " Multipy std and add mean results to real target value",
     )
-    parser.add_argument('--energy', default=-1.0, type=float, help="target, -1")
+    parser.add_argument('--energy_per_atom', default=-1, type=float, help="target, -1")
+    parser.add_argument('--energy', default=-1, type=float, help="target, -1")
+    parser.add_argument('--pressure', default=-1, type=float, help="target, -1")
 
     args = parser.parse_args()
 

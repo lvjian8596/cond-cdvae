@@ -403,7 +403,6 @@ class CDVAE(BaseModule):
             pred_cart_coord_diff, noisy_frac_coords, used_sigmas_per_atom, batch
         )
         num_atom_loss = self.num_atom_loss(pred_num_atoms, batch)
-        lattice_loss = self.lattice_loss(pred_lengths_and_angles, batch)
         composition_loss = self.composition_loss(
             pred_composition_per_atom, batch.atom_types, batch
         )
@@ -586,36 +585,32 @@ class CDVAE(BaseModule):
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         teacher_forcing = self.current_epoch <= self.hparams.teacher_forcing_max_epoch
         outputs = self(batch, teacher_forcing, training=True)
-        # print(torch.max(outputs['z']))
         log_dict, loss = self.compute_stats(batch, outputs, prefix='train')
-        self.log_dict(
-            log_dict,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch.num_graphs,
-        )
+        B = batch.num_graphs
+        prog_key = ["train_loss", "val_loss", "test_loss"]
+        prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
+        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
+        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
         return loss
 
     def validation_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         outputs = self(batch, teacher_forcing=False, training=False)
         log_dict, loss = self.compute_stats(batch, outputs, prefix='val')
-        self.log_dict(
-            log_dict,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch.num_graphs,
-        )
+        B = batch.num_graphs
+        prog_key = ["train_loss", "val_loss", "test_loss"]
+        prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
+        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
+        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
         return loss
 
     def test_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         outputs = self(batch, teacher_forcing=False, training=False)
         log_dict, loss = self.compute_stats(batch, outputs, prefix='test')
-        self.log_dict(
-            log_dict,
-            batch_size=batch.num_graphs,
-        )
+        B = batch.num_graphs
+        prog_key = ["train_loss", "val_loss", "test_loss"]
+        prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
+        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
+        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
         return loss
 
     def compute_stats(self, batch, outputs, prefix):
