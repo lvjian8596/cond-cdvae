@@ -86,12 +86,10 @@ class CDVAE(BaseModule):
         self.agg_cond = AggregateConditioning(
             self.hparams.conditions.cond_dim,
             self.hparams.latent_dim,
+            self.hparams.conditions.mode,
         )
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
-        self.fc_var = nn.Linear(
-            self.hparams.latent_dim,
-            self.hparams.latent_dim,
-        )
+        self.fc_var = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         hydra.utils.log.info("Initializing encoder done")
 
         hydra.utils.log.info("Initializing decoder ...")
@@ -367,7 +365,8 @@ class CDVAE(BaseModule):
                 "cond/z_std": wandb.Histogram(z.detach().cpu().std(0)),
                 "cond/cond_z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
                 "cond/cond_z_std": wandb.Histogram(z.detach().cpu().std(0)),
-            }
+            },
+            step=self.global_step,
         )
 
         # pred lattice from cond_z
@@ -513,36 +512,32 @@ class CDVAE(BaseModule):
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         teacher_forcing = self.current_epoch <= self.hparams.teacher_forcing_max_epoch
         outputs = self(batch, teacher_forcing, training=True)
-        # print(torch.max(outputs['z']))
         log_dict, loss = self.compute_stats(batch, outputs, prefix='train')
-        self.log_dict(
-            log_dict,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch.num_graphs,
-        )
+        B = batch.num_graphs
+        prog_key = ["train_loss", "val_loss", "test_loss"]
+        prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
+        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
+        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
         return loss
 
     def validation_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         outputs = self(batch, teacher_forcing=False, training=False)
         log_dict, loss = self.compute_stats(batch, outputs, prefix='val')
-        self.log_dict(
-            log_dict,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch.num_graphs,
-        )
+        B = batch.num_graphs
+        prog_key = ["train_loss", "val_loss", "test_loss"]
+        prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
+        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
+        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
         return loss
 
     def test_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         outputs = self(batch, teacher_forcing=False, training=False)
         log_dict, loss = self.compute_stats(batch, outputs, prefix='test')
-        self.log_dict(
-            log_dict,
-            batch_size=batch.num_graphs,
-        )
+        B = batch.num_graphs
+        prog_key = ["train_loss", "val_loss", "test_loss"]
+        prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
+        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
+        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
         return loss
 
     def compute_stats(self, batch, outputs, prefix):
