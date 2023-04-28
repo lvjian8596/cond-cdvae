@@ -86,10 +86,13 @@ class VectorEmbedding(SubEmbedding):
         return self.mlp(prop)
 
 
-### [cG-SchNet](https://github.com/atomistic-machine-learning/cG-SchNet/blob/53d73830f9fb1158296f060c2f82be375e2bb7f9/nn_classes.py#L687)
-### MISC
+# ## [cG-SchNet](
+# ## MISC
 class GaussianExpansion(nn.Module):
     r"""Expansion layer using a set of Gaussian functions.
+
+    https://github.com/atomistic-machine-learning/cG-SchNet/blob/53d73830f9fb1158296f060c2f82be375e2bb7f9/nn_classes.py#L687)
+
     Args:
         start (float): center of first Gaussian function, :math:`\mu_0`.
         stop (float): center of last Gaussian function, :math:`\mu_{N_g}`.
@@ -102,9 +105,7 @@ class GaussianExpansion(nn.Module):
             None).
     """
 
-    def __init__(
-        self, start, stop, n_gaussians=50, trainable=False, width=None
-    ):
+    def __init__(self, start, stop, n_gaussians=50, trainable=False, width=None):
         super(GaussianExpansion, self).__init__()
         # compute offset and width of Gaussian functions
         offset = torch.linspace(start, stop, n_gaussians)
@@ -154,6 +155,8 @@ class MultiEmbedding(nn.Module):
         fc_num_layers: int,
         cond_dim: int,
         types: dict,
+        *args,
+        **kwargs,
     ):
         """Concatenate multi-embedding vector
 
