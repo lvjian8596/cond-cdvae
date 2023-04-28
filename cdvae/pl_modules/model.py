@@ -74,20 +74,24 @@ class CDVAE(BaseModule):
         super().__init__(*args, **kwargs)
 
         hydra.utils.log.info("Initializing encoder ...")
+        # =================== Embedding multi-conditions ==============
         self.multiemb: MultiEmbedding = hydra.utils.instantiate(
             self.hparams.conditions,
             _recursive_=False,
         )
+        # =============================================================
         self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
             self.hparams.encoder,
             num_targets=self.hparams.latent_dim,
             cond_dim=self.hparams.conditions.cond_dim,
         )
+        # ==================== Aggregate ====================
         self.agg_cond = AggregateConditioning(
             self.hparams.conditions.cond_dim,
             self.hparams.latent_dim,
             self.hparams.conditions.mode,
         )
+        # ===================================================
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         self.fc_var = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         hydra.utils.log.info("Initializing encoder done")

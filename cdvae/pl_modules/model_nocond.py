@@ -596,6 +596,12 @@ class CDVAE(BaseModule):
     def validation_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         outputs = self(batch, teacher_forcing=False, training=False)
         log_dict, loss = self.compute_stats(batch, outputs, prefix='val')
+        B = batch.num_graphs
+        prog_key = ["train_loss", "val_loss", "test_loss"]
+        prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
+        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
+        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        return loss
 
     def test_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         outputs = self(batch, teacher_forcing=False, training=False)
