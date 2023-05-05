@@ -355,7 +355,9 @@ class CDVAE(BaseModule):
         cond_vec = self.multiemb(conditions)
 
         # hacky way to resolve the NaN issue. Will need more careful debugging later.
-        mu, log_var, z = self.encode(batch, cond_vec)
+        # mu, log_var, z = self.encode(batch, cond_vec)
+        # Do not add condition in Encode step
+        mu, log_var, z = self.encode(batch, None)
         assert torch.isfinite(z).all()
 
         # z (B, lattent_dim)
