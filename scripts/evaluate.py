@@ -346,6 +346,8 @@ def main(args):
             **{
                 'energy_per_atom': args.energy_per_atom,
                 'energy': args.energy,
+                'enthalpy_per_atom': args.enthalpy_per_atom,
+                'enthalpy': args.enthalpy,
                 'pressure': args.pressure,
             },
         )
