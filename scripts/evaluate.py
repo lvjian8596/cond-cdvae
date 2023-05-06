@@ -346,6 +346,8 @@ def main(args):
             **{
                 'energy_per_atom': args.energy_per_atom,
                 'energy': args.energy,
+                'enthalpy_per_atom': args.enthalpy_per_atom,
+                'enthalpy': args.enthalpy,
                 'pressure': args.pressure,
             },
         )
@@ -416,6 +418,8 @@ if __name__ == '__main__':
     )
     parser.add_argument('--energy_per_atom', default=-1, type=float, help="target, -1")
     parser.add_argument('--energy', default=-1, type=float, help="target, -1")
+    parser.add_argument('--enthalpy_per_atom', default=-1, type=float, help="default -1")  # fmt: skip
+    parser.add_argument('--enthalpy', default=-1, type=float, help="target, -1")
     parser.add_argument('--pressure', default=-1, type=float, help="target, -1")
 
     args = parser.parse_args()
