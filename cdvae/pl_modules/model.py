@@ -109,6 +109,19 @@ class CDVAE(BaseModule):
             6,
             self.hparams.lattice_dropout,
         )
+        if self.hparams.predict_property:
+            self.fc_property_before_cond = build_mlp(
+                self.hparams.latent_dim,
+                self.hparams.hidden_dim,
+                self.hparams.fc_num_layers,
+                1,
+            )
+            self.fc_property_after_cond = build_mlp(
+                self.hparams.latent_dim,
+                self.hparams.hidden_dim,
+                self.hparams.fc_num_layers,
+                1,
+            )
         # ===== split lattice lengths and angles =====
         # self.fc_lengths = build_mlp(
         #     self.hparams.latent_dim,
