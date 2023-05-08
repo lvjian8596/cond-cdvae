@@ -95,7 +95,7 @@ class GemNetT(torch.nn.Module):
     def __init__(
         self,
         num_targets: int,
-        latent_dim: int,
+        latent_dim: int,  # dim of z, change to LazyLinear, not used anymore
         num_spherical: int = 7,
         num_radial: int = 128,
         num_blocks: int = 3,
@@ -187,7 +187,7 @@ class GemNetT(torch.nn.Module):
 
         # Embedding block
         self.atom_emb = AtomEmbedding(emb_size_atom)
-        self.atom_latent_emb = nn.Linear(emb_size_atom + latent_dim, emb_size_atom)
+        self.atom_latent_emb = nn.LazyLinear(emb_size_atom)
         self.edge_emb = EdgeEmbedding(
             emb_size_atom, num_radial, emb_size_edge, activation=activation
         )
