@@ -158,7 +158,7 @@ def generation(
             sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
         # return `sampled_atom_types` and `sampled_num_atoms`
         conditions = {
-            k: torch.tensor([v] * batch_size, device=model.device).view(-1, 1)
+            k: torch.tensor([v] * batch_size, device=model.device).view(-1, 1).float()
             for k, v in norm_target_props.items()
         }
         conditions['composition'] = (sampled_atom_types, sampled_num_atoms)
@@ -416,11 +416,21 @@ if __name__ == '__main__':
         help="The above are relative target to std value."
         " Multipy std and add mean results to real target value",
     )
-    parser.add_argument('--energy_per_atom', default=-1, type=float, help="target, -1")
-    parser.add_argument('--energy', default=-1, type=float, help="target, -1")
-    parser.add_argument('--enthalpy_per_atom', default=-1, type=float, help="default -1")  # fmt: skip
-    parser.add_argument('--enthalpy', default=-1, type=float, help="target, -1")
-    parser.add_argument('--pressure', default=-1, type=float, help="target, -1")
+    parser.add_argument(
+        '--energy_per_atom', default=-1, type=float, help="relative std, default -1"
+    )
+    parser.add_argument(
+        '--energy', default=-1, type=float, help="relative std, default -1"
+    )
+    parser.add_argument(
+        '--enthalpy_per_atom', default=-1, type=float, help="relative std, default -1"
+    )
+    parser.add_argument(
+        '--enthalpy', default=-1, type=float, help="relative std, default -1"
+    )
+    parser.add_argument(
+        '--pressure', default=-1, type=float, help="relative std, default -1"
+    )
 
     args = parser.parse_args()
 
