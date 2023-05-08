@@ -79,28 +79,29 @@ class CDVAE(BaseModule):
             self.hparams.conditions,
             _recursive_=False,
         )
-        # =============================================================
+        # ======================= Encoder =============================
         self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
             self.hparams.encoder,
             num_targets=self.hparams.latent_dim,
             cond_dim=self.hparams.conditions.cond_dim,
         )
-        # ==================== Aggregate ====================
+        # ==================== Aggregate p(z|c) ====================
         self.agg_cond = AggregateConditioning(
             self.hparams.conditions.cond_dim,
-            self.hparams.latent_dim,
+            self.hparams.latent_dim,  # z dim
             self.hparams.conditions.mode,
         )
-        # ===================================================
+        # ==================== mu & std ==========================
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         self.fc_var = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         hydra.utils.log.info("Initializing encoder done")
-
+        # ======================= Decoder =======================
         hydra.utils.log.info("Initializing decoder ...")
         self.decoder: GemNetTDecoder = hydra.utils.instantiate(
             self.hparams.decoder,
             _recursive_=False,
-        )
+        )  # dynamic z dim
+        # ============ Lattice and other Recall head ===============
         self.fc_lattice = build_mlp(
             self.hparams.latent_dim,
             self.hparams.hidden_dim,
@@ -363,17 +364,24 @@ class CDVAE(BaseModule):
         # z (B, lattent_dim)
         cond_z = self.agg_cond(cond_vec, z)
 
-        wandb.log(
-            {
+        # if self.hparams.predict_property:
+        #     property_loss_before_cond =
+        # else:
+        #     property_loss = 0.
+
+        if self.global_step % 20 == 1:
+            cond_dict = {
                 "cond/cond_vec_mean": wandb.Histogram(cond_vec.detach().cpu().mean(0)),
                 "cond/cond_vec_std": wandb.Histogram(cond_vec.detach().cpu().std(0)),
                 "cond/z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
                 "cond/z_std": wandb.Histogram(z.detach().cpu().std(0)),
                 "cond/cond_z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
                 "cond/cond_z_std": wandb.Histogram(z.detach().cpu().std(0)),
-            },
-            step=self.global_step,
-        )
+            }
+            wandb.log(
+                cond_dict,
+                step=self.global_step,
+            )
 
         # pred lattice from cond_z
         # (B, 6)                 (B, 3)        (B, 3)

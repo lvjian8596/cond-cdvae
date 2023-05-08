@@ -1,16 +1,15 @@
-from typing import List
 from pathlib import Path
+from typing import List
 
-import numpy as np
-import torch
 import hydra
+import numpy as np
 import omegaconf
 import pytorch_lightning as pl
+import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Callback, seed_everything
 from pytorch_lightning.callbacks import (
-    BatchSizeFinder,
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
@@ -121,6 +120,11 @@ def run(cfg: DictConfig):
     )
     model.prop_scalers = [scaler.copy() for scaler in datamodule.prop_scalers]
     torch.save(datamodule.prop_scalers, hydra_dir / 'prop_scalers.pt')
+
+    # forward dummy batch to initialize LazyModel
+    datamodule.setup()
+    dummybatch = next(iter(datamodule.train_dataloader()))
+    model.forward(dummybatch)
 
     # Instantiate the callbacks
     callbacks: List[Callback] = build_callbacks(cfg=cfg)

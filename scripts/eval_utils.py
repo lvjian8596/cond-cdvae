@@ -52,9 +52,20 @@ def load_config(model_path):
     return cfg
 
 
-def load_model(model_path, load_data=False, testing=True):
+def load_model(model_path, load_data=True, testing=True):
     with initialize_config_dir(str(model_path), version_base="1.1"):
         cfg = compose(config_name='hparams')
+
+        datamodule = hydra.utils.instantiate(
+            cfg.data.datamodule, _recursive_=False, scaler_path=model_path
+        )
+        if testing:
+            datamodule.setup('test')
+            test_loader = datamodule.test_dataloader()[0]
+        else:
+            datamodule.setup()
+            test_loader = datamodule.val_dataloader()[0]
+
         model = hydra.utils.instantiate(
             cfg.model,
             optim=cfg.optim,
@@ -62,6 +73,8 @@ def load_model(model_path, load_data=False, testing=True):
             logging=cfg.logging,
             _recursive_=False,
         )
+        dummybatch = next(iter(datamodule.train_dataloader()))
+        model.forward(dummybatch)  # initialize LazyModel
         ckpts = list(model_path.glob('*.ckpt'))
         if len(ckpts) > 0:
             ckpt_epochs = np.array(
@@ -74,19 +87,6 @@ def load_model(model_path, load_data=False, testing=True):
         model = model.load_from_checkpoint(ckpt)
         model.lattice_scaler = torch.load(model_path / 'lattice_scaler.pt')
         model.prop_scalers = torch.load(model_path / 'prop_scalers.pt')
-
-        if load_data:
-            datamodule = hydra.utils.instantiate(
-                cfg.data.datamodule, _recursive_=False, scaler_path=model_path
-            )
-            if testing:
-                datamodule.setup('test')
-                test_loader = datamodule.test_dataloader()[0]
-            else:
-                datamodule.setup()
-                test_loader = datamodule.val_dataloader()[0]
-        else:
-            test_loader = None
 
     # model = torch.compile(model, mode="reduce-overhead")
     return model, test_loader, cfg

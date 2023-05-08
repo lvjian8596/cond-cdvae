@@ -216,12 +216,13 @@ class AggregateConditioning(nn.Module):
         always output the same dimension as embedding vector z
 
         Args:
-            cond_dim (int): Dimension of condition vector
-            emb_dim (int): Dimension of input embedding vector's dim
+            cond_dim (int): Dimension of condition vector, c_dim
+            emb_dim (int): Dimension of input embedding vector's dim, z_dim
             mode (str, optional): Aggregate mode. ['concatenate', 'bias',
             'scale', 'film'] Defaults to 'concat'.
         """
         super().__init__()
+        # TODO: change concat to pure concat
         if mode.startswith('concat') or mode.startswith('cat'):
             self.cond_model = ConcatConditioning(emb_dim, cond_dim)
         elif mode.startswith('bias'):
