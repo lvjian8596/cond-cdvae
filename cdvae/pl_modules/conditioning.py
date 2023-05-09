@@ -16,7 +16,7 @@ class SubEmbedding(nn.Module):
 
 
 class CompositionEmbedding(SubEmbedding):
-    def __init__(self, n_out, reduce='sum'):
+    def __init__(self, n_out, reduce='mean'):
         super().__init__(n_out)
         self.n_out = n_out
         self.reduce = reduce

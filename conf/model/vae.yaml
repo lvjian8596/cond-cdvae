@@ -38,7 +38,7 @@ conditions:
     composition:
       _target_: cdvae.pl_modules.conditioning.CompositionEmbedding
       n_out: ${model.encoder.hidden_channels}
-      reduce: sum
+      reduce: mean
 
     energy_per_atom:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
