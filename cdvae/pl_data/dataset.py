@@ -94,13 +94,11 @@ class CrystDataset(Dataset):
             atom_types=torch.LongTensor(atom_types),
             lengths=torch.Tensor(lengths).view(1, -1),
             angles=torch.Tensor(angles).view(1, -1),
-            edge_index=torch.LongTensor(edge_indices.T).contiguous(),
-            # shape (2, num_edges)
+            edge_index=torch.LongTensor(edge_indices.T).contiguous(),  # (2, num_edges)
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
-            num_nodes=
-            num_atoms,  # special attribute used for batching in pytorch geometric
+            num_nodes=num_atoms,  # special attribute used for batching in pyg
             mp_id=data_dict['mp_id'],
             **p_dict,
         )
@@ -167,8 +165,7 @@ class TensorCrystDataset(Dataset):
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
-            num_nodes=
-            num_atoms,  # special attribute used for batching in pytorch geometric
+            num_nodes=num_atoms,  # special attribute used for batching in pyg
         )
         return data
 
