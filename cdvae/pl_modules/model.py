@@ -84,7 +84,6 @@ class CDVAE(BaseModule):
         self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
             self.hparams.encoder,
             num_targets=self.hparams.latent_dim,
-            cond_dim=self.hparams.conditions.cond_dim,
         )
         # ==================== mu & std ==========================
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)

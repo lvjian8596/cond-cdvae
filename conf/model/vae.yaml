@@ -39,13 +39,7 @@ zgivenc:
 # c
 conditions:
   _target_: cdvae.pl_modules.conditioning.MultiEmbedding
-  mode: concat
   cond_keys: ${data.conditions}
-  # not used
-  no_mlp: true
-  hidden_dim: 128
-  fc_num_layers: 3
-  cond_dim: 50
 
   types:
     composition:

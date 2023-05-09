@@ -1,4 +1,5 @@
-"""This module is adapted from https://github.com/Open-Catalyst-Project/ocp/tree/master/ocpmodels/models
+"""This module is adapted from
+https://github.com/Open-Catalyst-Project/ocp/tree/master/ocpmodels/models
 DimeNet++
 """
 import warnings
@@ -236,7 +237,6 @@ class DimeNetPlusPlus(torch.nn.Module):
     def __init__(
         self,
         out_channels,  # output dim, num_targets
-        cond_dim=128,  # condition vec dim
         hidden_channels=128,  # internal dim
         num_blocks=4,
         int_emb_size=64,
@@ -342,7 +342,6 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
     def __init__(
         self,
         num_targets,
-        cond_dim=128,
         hidden_channels=128,
         num_blocks=4,
         int_emb_size=64,
@@ -368,7 +367,6 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
 
         super(DimeNetPlusPlusWrap, self).__init__(
             out_channels=num_targets,
-            cond_dim=cond_dim,
             hidden_channels=hidden_channels,
             num_blocks=num_blocks,
             int_emb_size=int_emb_size,
@@ -444,8 +442,8 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         ):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
             P += output_block(x, rbf, i, num_nodes=pos.size(0))
-            assert torch.isfinite(x).all(), f"explosion in Interaction"
-            assert torch.isfinite(P).all(), f"explosion in Interaction"
+            assert torch.isfinite(x).all(), "explosion in Interaction"
+            assert torch.isfinite(P).all(), "explosion in Interaction"
 
         # Use mean
         if batch is None:
