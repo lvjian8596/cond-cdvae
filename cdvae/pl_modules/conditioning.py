@@ -158,6 +158,7 @@ class MultiEmbedding(nn.Module):
     def __init__(
         self,
         cond_keys: list,
+        no_mlp: bool,
         hidden_dim: int,
         fc_num_layers: int,
         cond_dim: int,
@@ -183,7 +184,10 @@ class MultiEmbedding(nn.Module):
             sub_emb = hydra.utils.instantiate(types[cond_key])
             self.sub_emb_list.append(sub_emb)
             n_in += sub_emb.n_out
-        self.cond_mlp = build_mlp(n_in, hidden_dim, fc_num_layers, cond_dim)
+        if no_mlp:
+            self.cond_mlp = nn.Identity()
+        else:
+            self.cond_mlp = build_mlp(n_in, hidden_dim, fc_num_layers, cond_dim)
 
     def forward(self, conditions: dict):
         # conditions={'composition': (atom_types, num_atoms), 'cond_name': cond_vals}
