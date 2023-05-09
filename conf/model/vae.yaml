@@ -26,13 +26,22 @@ defaults:
   - encoder: dimenet
   - decoder: gemnet
 
+# agg z|c
+zgivenc:
+  _target_: cdvae.pl_modules.conditioning.
+  zdim: ${model.latent_dim}
+  cdim: 
+# TODO: 不在conditions中处理各个c，留到zgivenc中处理
+
+# c
 conditions:
   _target_: cdvae.pl_modules.conditioning.MultiEmbedding
   mode: concat
   cond_keys: ${data.conditions}
+  no_mlp: true
   hidden_dim: 128
   fc_num_layers: 3
-  cond_dim: 128
+  cond_dim: 50
 
   types:
     composition:
@@ -43,77 +52,83 @@ conditions:
     energy_per_atom:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
       prop_name: energy_per_atom
-      hidden_dim: ${model.encoder.hidden_channels}
-      fc_num_layers: 5
-      n_out: ${model.encoder.hidden_channels}
-      batch_norm: true
+      batch_norm: false
+      no_expansion: false
       n_basis: 50
       start: -2
       stop: 2
       trainable_gaussians: false
-      no_expansion: false
+      no_mlp: true
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
 
     enthalpy_per_atom:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
       prop_name: enthalpy_per_atom
-      hidden_dim: ${model.encoder.hidden_channels}
-      fc_num_layers: 5
-      n_out: ${model.encoder.hidden_channels}
-      batch_norm: true
+      batch_norm: false
+      no_expansion: false
       n_basis: 50
       start: -2
       stop: 2
       trainable_gaussians: false
-      no_expansion: false
+      no_mlp: true
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
 
     energy:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
       prop_name: energy
-      hidden_dim: ${model.encoder.hidden_channels}
-      fc_num_layers: 5
-      n_out: ${model.encoder.hidden_channels}
-      batch_norm: true
+      batch_norm: false
+      no_expansion: false
       n_basis: 50
       start: -2
       stop: 2
       trainable_gaussians: false
-      no_expansion: false
+      no_mlp: true
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
 
     enthalpy:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
       prop_name: enthalpy
-      hidden_dim: ${model.encoder.hidden_channels}
-      fc_num_layers: 5
-      n_out: ${model.encoder.hidden_channels}
-      batch_norm: true
+      batch_norm: false
+      no_expansion: false
       n_basis: 50
       start: -2
       stop: 2
       trainable_gaussians: false
-      no_expansion: false
+      no_mlp: true
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
 
     formation_energy_per_atom:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
       prop_name: formation_energy_per_atom
-      hidden_dim: ${model.encoder.hidden_channels}
-      fc_num_layers: 5
-      n_out: ${model.encoder.hidden_channels}
-      batch_norm: true
+      batch_norm: false
+      no_expansion: false
       n_basis: 50
       start: -2
       stop: 2
       trainable_gaussians: false
-      no_expansion: false
+      no_mlp: true
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
 
     pressure:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
       prop_name: pressure
-      hidden_dim: ${model.encoder.hidden_channels}
-      fc_num_layers: 5
-      n_out: ${model.encoder.hidden_channels}
-      batch_norm: true
+      batch_norm: false
+      no_expansion: false
       n_basis: 50
       start: -2
       stop: 2
       trainable_gaussians: false
-      no_expansion: false
+      no_mlp: true
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
