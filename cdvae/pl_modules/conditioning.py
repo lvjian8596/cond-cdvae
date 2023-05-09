@@ -38,39 +38,45 @@ class ScalarEmbedding(SubEmbedding):
     def __init__(
         self,
         prop_name: str,
-        hidden_dim: int,
-        fc_num_layers: int,
-        n_out: int,
-        batch_norm: bool,
+        # batch norm
+        batch_norm: bool = False,
         # gaussian expansion
-        n_basis: int,  # num gaussian basis
+        no_expansion: bool = False,
+        n_basis: int = None,  # num gaussian basis
         start: float = None,
         stop: float = None,
         trainable_gaussians: bool = False,
         width: float = None,
-        no_expansion: bool = False,
+        # out mlp
+        no_mlp: bool = False,
+        hidden_dim: int = None,
+        fc_num_layers: int = None,
+        n_out: int = None,
     ):
         super().__init__(n_out)
         self.n_out = n_out
         self.prop_name = prop_name
+
         if batch_norm:
             self.bn = nn.BatchNorm1d(1)
         else:
-            self.bn = None
-        if not no_expansion:
+            self.bn = nn.Identity()
+
+        if no_expansion:
+            self.expansion_net = nn.Identity()
+        else:
             self.expansion_net = GaussianExpansion(
                 start, stop, n_basis, trainable_gaussians, width
             )
-            self.mlp = build_mlp(n_basis, hidden_dim, fc_num_layers, n_out)
+
+        if no_mlp:
+            self.mlp = nn.Identity()
         else:
-            self.expansion_net = None
-            self.mlp = build_mlp(1, hidden_dim, fc_num_layers, n_out)
+            self.mlp = build_mlp(None, hidden_dim, fc_num_layers, n_out)
 
     def forward(self, prop):
-        if self.bn is not None:
-            prop = self.bn(prop)
-        if self.expansion_net is not None:
-            prop = self.expansion_net(prop)  # expanded prop
+        prop = self.bn(prop)
+        prop = self.expansion_net(prop)  # expanded prop
         out = self.mlp(prop)
         return out
 
@@ -137,6 +143,7 @@ class GaussianExpansion(nn.Module):
         return torch.exp(coeff * torch.pow(diff, 2))
 
 
+# condition vector c
 class MultiEmbedding(nn.Module):
     """Concatenate multi-embedding vector
     all sublayer should have a attribute named 'n_out'
@@ -210,10 +217,10 @@ class AtomwiseConditioning(nn.Module):
         return emb
 
 
+# p(z|c)
 class AggregateConditioning(nn.Module):
     def __init__(self, cond_dim: int, emb_dim: int, mode: str = 'concat'):
         """Aggregate condition vector c with embedding vector z, output z',
-        always output the same dimension as embedding vector z
 
         Args:
             cond_dim (int): Dimension of condition vector, c_dim
@@ -222,7 +229,6 @@ class AggregateConditioning(nn.Module):
             'scale', 'film'] Defaults to 'concat'.
         """
         super().__init__()
-        # TODO: change concat to pure concat
         if mode.startswith('concat') or mode.startswith('cat'):
             self.cond_model = ConcatConditioning(emb_dim, cond_dim)
         elif mode.startswith('bias'):
