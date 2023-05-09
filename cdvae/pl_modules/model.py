@@ -23,7 +23,7 @@ from cdvae.common.data_utils import (
 )
 from cdvae.common.utils import PROJECT_ROOT
 from cdvae.pl_modules.basic_blocks import build_mlp
-from cdvae.pl_modules.conditioning import AggregateConditioning, MultiEmbedding
+from cdvae.pl_modules.conditioning import MultiEmbedding, ZGivenC
 from cdvae.pl_modules.decoder import GemNetTDecoder
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gnn import DimeNetPlusPlusWrap
@@ -79,17 +79,12 @@ class CDVAE(BaseModule):
             self.hparams.conditions,
             _recursive_=False,
         )
+        self.zgivenc: ZGivenC = hydra.utils.instantiate(self.hparams.zgivenc)
         # ======================= Encoder =============================
         self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
             self.hparams.encoder,
             num_targets=self.hparams.latent_dim,
             cond_dim=self.hparams.conditions.cond_dim,
-        )
-        # ==================== Aggregate p(z|c) ====================
-        self.agg_cond = AggregateConditioning(
-            self.hparams.conditions.cond_dim,
-            self.hparams.latent_dim,  # z dim
-            self.hparams.conditions.mode,
         )
         # ==================== mu & std ==========================
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
@@ -103,7 +98,7 @@ class CDVAE(BaseModule):
         )  # dynamic z dim
         # ============ Lattice and other Recall head ===============
         self.fc_lattice = build_mlp(
-            self.hparams.latent_dim,
+            None,  # lazy model
             self.hparams.hidden_dim,
             self.hparams.fc_num_layers,
             6,
@@ -205,10 +200,6 @@ class CDVAE(BaseModule):
 
         mu = self.fc_mu(hidden)
         log_var = self.fc_var(hidden)
-
-        # debug
-        detact_overflow(mu, 100, batch, "mu")
-        detact_overflow(log_var, 100, batch, "log_var")
 
         z = self.reparameterize(mu, log_var)
         return mu, log_var, z
@@ -364,18 +355,16 @@ class CDVAE(BaseModule):
         return samples
 
     def forward(self, batch, teacher_forcing=False, training=True):
-        # conditional z
-        conditions = self.build_conditions(batch)
-        cond_vec = self.multiemb(conditions)
-
         # hacky way to resolve the NaN issue. Will need more careful debugging later.
         # mu, log_var, z = self.encode(batch, cond_vec)
         # Do not add condition in Encode step
         mu, log_var, z = self.encode(batch, None)
         assert torch.isfinite(z).all()
 
-        # z (B, lattent_dim)
-        cond_z = self.agg_cond(cond_vec, z)
+        # z|c
+        conditions = self.build_conditions(batch)
+        c_dict = self.multiemb(conditions)  # dict of each condition vector
+        cond_z = self.zgivenc(z, c_dict)  # z (B, *)
 
         # if self.hparams.predict_property:
         #     property_loss_before_cond =
@@ -383,16 +372,14 @@ class CDVAE(BaseModule):
         #     property_loss = 0.
 
         if self.global_step % 20 == 1:
-            cond_dict = {
-                "cond/cond_vec_mean": wandb.Histogram(cond_vec.detach().cpu().mean(0)),
-                "cond/cond_vec_std": wandb.Histogram(cond_vec.detach().cpu().std(0)),
+            log_cond_dict = {
                 "cond/z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
                 "cond/z_std": wandb.Histogram(z.detach().cpu().std(0)),
-                "cond/cond_z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
-                "cond/cond_z_std": wandb.Histogram(z.detach().cpu().std(0)),
+                "cond/cond_z_mean": wandb.Histogram(cond_z.detach().cpu().mean(0)),
+                "cond/cond_z_std": wandb.Histogram(cond_z.detach().cpu().std(0)),
             }
             wandb.log(
-                cond_dict,
+                log_cond_dict,
                 step=self.global_step,
             )
 

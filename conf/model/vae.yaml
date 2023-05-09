@@ -28,16 +28,20 @@ defaults:
 
 # agg z|c
 zgivenc:
-  _target_: cdvae.pl_modules.conditioning.
+  _target_: cdvae.pl_modules.conditioning.ZGivenC
   zdim: ${model.latent_dim}
-  cdim: 
-# TODO: 不在conditions中处理各个c，留到zgivenc中处理
+  mode: concat
+  no_mlp: true
+  hidden_dim: 64
+  fc_num_layers: 3
+  out_dim: 64
 
 # c
 conditions:
   _target_: cdvae.pl_modules.conditioning.MultiEmbedding
   mode: concat
   cond_keys: ${data.conditions}
+  # not used
   no_mlp: true
   hidden_dim: 128
   fc_num_layers: 3
@@ -46,7 +50,7 @@ conditions:
   types:
     composition:
       _target_: cdvae.pl_modules.conditioning.CompositionEmbedding
-      n_out: ${model.encoder.hidden_channels}
+      n_out: 50
       reduce: mean
 
     energy_per_atom:

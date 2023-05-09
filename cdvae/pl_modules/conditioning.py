@@ -148,31 +148,17 @@ class MultiEmbedding(nn.Module):
     """Concatenate multi-embedding vector
     all sublayer should have a attribute named 'n_out'
 
-        feat1 -> sub_layer1 \
-                            concat -> MLP -> out
-        feat2 -> sub_layer2 /
+        feat1 -> sub_layer1
+        feat2 -> sub_layer2
 
     Returns: z(B, out_dim)
     """
 
-    def __init__(
-        self,
-        cond_keys: list,
-        no_mlp: bool,
-        hidden_dim: int,
-        fc_num_layers: int,
-        cond_dim: int,
-        types: dict,
-        *args,
-        **kwargs,
-    ):
-        """Concatenate multi-embedding vector
+    def __init__(self, cond_keys: list, types: dict, *args, **kwargs):
+        """Get each condition vector
 
         Args:
             cond_keys (list): list of condition name strings
-            hidden_dim (int): hidden dimensions of out MLP
-            fc_num_layers (int): number of layers of out MLP
-            out_dim (int): out dimension of MLP
             types (dict or dict-like): kwargs of sub-embedding modules
         """
         super().__init__()
@@ -184,145 +170,104 @@ class MultiEmbedding(nn.Module):
             sub_emb = hydra.utils.instantiate(types[cond_key])
             self.sub_emb_list.append(sub_emb)
             n_in += sub_emb.n_out
-        if no_mlp:
-            self.cond_mlp = nn.Identity()
-        else:
-            self.cond_mlp = build_mlp(n_in, hidden_dim, fc_num_layers, cond_dim)
 
-    def forward(self, conditions: dict):
+    def forward(self, conditions: dict) -> dict:
         # conditions={'composition': (atom_types, num_atoms), 'cond_name': cond_vals}
-        cond_vecs = []
-        for cond_key, sub_emb in zip(self.cond_keys, self.sub_emb_list):
-            cond_vec = sub_emb(conditions[cond_key])
-            cond_vecs += [cond_vec]
-
-        cond_vecs = torch.cat(cond_vecs, dim=-1)
-        cond_vec = self.cond_mlp(cond_vecs)
-        return cond_vec
-
-
-class AtomwiseConditioning(nn.Module):
-    def __init__(self, cond_dim, atom_emb_size, mode: str = 'concat'):
-        """Aggregate condition vector c with atomtype embedding vector
-
-        Args:
-            cond_dim (int): Dimension of condition vector
-            atom_emb_size (int): Dimension of atom type embedding
-            mode (str, optional): Aggregate mode. Defaults to 'concat'.
-        """
-        super().__init__()
-        self.atom_emb = AtomEmbedding(atom_emb_size)
-        self.agg = AggregateConditioning(cond_dim, atom_emb_size, mode)
-
-    def forward(self, c, atom_types, num_atoms):
-        atom_emb = self.atom_emb(atom_types)
-        c_per_atom = c.repeat_interleave(num_atoms, dim=0)
-        emb = self.agg(c_per_atom, atom_emb)
-        return emb
+        return {
+            cond_key: sub_emb(conditions[cond_key])
+            for cond_key, sub_emb in zip(self.cond_keys, self.sub_emb_list)
+        }
 
 
 # p(z|c)
-class AggregateConditioning(nn.Module):
-    def __init__(self, cond_dim: int, emb_dim: int, mode: str = 'concat'):
+class ZGivenC(nn.Module):
+    def __init__(
+        self,
+        zdim,
+        mode='concat',
+        no_mlp=True,
+        hidden_dim=64,
+        fc_num_layers=1,
+        out_dim=64,
+        *args,
+        **kwargs,
+    ):
         """Aggregate condition vector c with embedding vector z, output z',
 
         Args:
-            cond_dim (int): Dimension of condition vector, c_dim
-            emb_dim (int): Dimension of input embedding vector's dim, z_dim
+            zdim (int): Dimension of input embedding vector's dim, z_dim
             mode (str, optional): Aggregate mode. ['concatenate', 'bias',
             'scale', 'film'] Defaults to 'concat'.
         """
         super().__init__()
         if mode.startswith('concat') or mode.startswith('cat'):
-            self.cond_model = ConcatConditioning(emb_dim, cond_dim)
+            self.cond_model = ConcatConditioning()
         elif mode.startswith('bias'):
-            self.cond_model = BiasConditioning(emb_dim, cond_dim)
+            self.cond_model = BiasConditioning(zdim)
         elif mode.startswith('scal'):
-            self.cond_model = ScaleConditioning(emb_dim, cond_dim)
+            self.cond_model = ScaleConditioning(zdim)
         elif mode.startswith('film'):
-            self.cond_model = FiLM(emb_dim, cond_dim)
+            self.cond_model = FiLM(zdim)
         else:
             raise ValueError("Unknown mode")
 
-    def forward(self, c, z):  # return cond_z
-        z = self.cond_model(z, c)
+        if no_mlp:
+            self.mlp = nn.Identity()
+        else:
+            self.mlp = build_mlp(None, hidden_dim, fc_num_layers, out_dim)
+
+    def forward(self, z, c: dict):  # return cond_z
+        z = self.cond_model(z, list(c.values()))
+        z = self.mlp(z)
         return z
 
 
 class ConcatConditioning(nn.Module):
-    """z = Lin(cat[x, y])"""
+    """z = [z|c1|c2|...]"""
 
-    def __init__(self, xdim, ydim, zdim=None):
-        super(ConcatConditioning, self).__init__()
+    def __init__(self):
+        super().__init__()
 
-        self.xdim = xdim
-        self.ydim = ydim
-        self.zdim = zdim if zdim is not None else xdim
-
-        self.linear = nn.Linear(self.xdim + self.ydim, self.zdim)
-
-    def forward(self, x, y):
-        assert x.size(1) == self.xdim
-        assert y.size(1) == self.ydim
-
-        m = torch.cat([x, y], axis=1)
-        z = self.linear(m)
+    def forward(self, z, c: list):
+        z = torch.cat([z] + c, axis=-1)
         return z
 
 
 class BiasConditioning(nn.Module):
-    """z = x + Lin(y)"""
+    """z = z + Lin([c1|c2])"""
 
-    def __init__(self, xdim, ydim):
-        super(BiasConditioning, self).__init__()
+    def __init__(self, zdim):
+        super().__init__()
+        self.linear = nn.LazyLinear(zdim)
 
-        self.xdim = xdim
-        self.ydim = ydim
-
-        self.linear = nn.Linear(ydim, xdim)
-
-    def forward(self, x, y):
-        assert x.size(1) == self.xdim
-        assert y.size(1) == self.ydim
-
-        z = x + self.linear(y)
+    def forward(self, z, c: list):
+        z = x + self.linear(torch.cat(c, axis=-1))
         return z
 
 
 class ScaleConditioning(nn.Module):
-    """z = x * Lin(y)"""
+    """z = z * Lin([c1|c2])"""
 
-    def __init__(self, xdim, ydim):
-        super(ScaleConditioning, self).__init__()
+    def __init__(self, zdim):
+        super().__init__()
+        self.linear = nn.LazyLinear(zdim)
 
-        self.xdim = xdim
-        self.ydim = ydim
-
-        self.linear = nn.Linear(ydim, xdim)
-
-    def forward(self, x, y):
-        assert x.size(1) == self.xdim
-        assert y.size(1) == self.ydim
-
-        z = x * self.linear(y)
+    def forward(self, z, c: list):
+        z = x * self.linear(torch.cat(c, axis=-1))
         return z
 
 
 class FiLM(nn.Module):
     """z = γ(y) * x + β(y)"""
 
-    def __init__(self, xdim, ydim):
-        super(FiLM, self).__init__()
-        self.xdim = xdim
-        self.ydim = ydim
-        self.gamma = nn.Linear(ydim, xdim)
-        self.beta = nn.Linear(ydim, xdim)
+    def __init__(self, zdim):
+        super().__init__()
+        self.gamma = nn.LazyLinear(zdim)
+        self.beta = nn.LazyLinear(zdim)
 
-    def forward(self, x, y):
-        assert x.size(1) == self.xdim
-        assert y.size(1) == self.ydim
-
-        z = self.gamma(y) * x + self.beta(y)
+    def forward(self, z, c: list):
+        c = torch.cat(c, axis=-1)
+        z = self.gamma(c) * z + self.beta(c)
         return z
 
 

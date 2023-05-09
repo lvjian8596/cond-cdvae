@@ -24,7 +24,6 @@ from cdvae.common.data_utils import (
     radius_graph_pbc_wrapper,
 )
 from cdvae.common.utils import PROJECT_ROOT
-from cdvae.pl_modules.conditioning import AtomwiseConditioning
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.gemnet import GemNetT
 from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
@@ -267,7 +266,6 @@ class DimeNetPlusPlus(torch.nn.Module):
         )
 
         self.atomemb = AtomEmbedding(hidden_channels)
-        self.atomwisecond = AtomwiseConditioning(cond_dim, hidden_channels)
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
         self.output_blocks = torch.nn.ModuleList(
@@ -436,11 +434,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         rbf = self.rbf(dist)
         sbf = self.sbf(dist, angle, idx_kj)
 
-        # Embedding block.
-        if cond_vec is not None:
-            x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
-        else:
-            x = self.atomemb(data.atom_types.long())
+        x = self.atomemb(data.atom_types.long())
         x = self.emb(x, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 
