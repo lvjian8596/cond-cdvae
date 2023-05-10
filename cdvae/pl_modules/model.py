@@ -47,6 +47,8 @@ class BaseModule(pl.LightningModule):
         super().__init__()
         # populate self.hparams with args and kwargs automagically!
         self.save_hyperparameters()
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
 
     def configure_optimizers(self):
         opt = hydra.utils.instantiate(
@@ -531,6 +533,7 @@ class CDVAE(BaseModule):
         prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
         self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
         self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        self.training_step_outputs.append(loss)
         return loss
 
     def validation_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
@@ -541,6 +544,7 @@ class CDVAE(BaseModule):
         prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
         self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
         self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        self.validation_step_outputs.append(loss)
         return loss
 
     def test_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
@@ -608,6 +612,22 @@ class CDVAE(BaseModule):
             )
 
         return log_dict, loss
+
+    def on_train_epoch_end(self):
+        # do something with all training_step outputs, for example:
+        trn_loss_epoch_mean = torch.stack(self.training_step_outputs).mean().item()
+        val_loss_epoch_mean = (
+            torch.stack(self.validation_step_outputs).mean().item()
+            if len(self.validation_step_outputs) != 0
+            else None
+        )
+        print(
+            f"{self.current_epoch=} {self.global_step=} "
+            f"{trn_loss_epoch_mean=} {val_loss_epoch_mean=}"
+        )
+        # free up the memory
+        self.training_step_outputs.clear()
+        self.validation_step_outputs.clear()
 
 
 class CrystGNN_Supervise(BaseModule):

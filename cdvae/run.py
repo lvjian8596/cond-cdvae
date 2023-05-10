@@ -16,6 +16,7 @@ from pytorch_lightning.callbacks import (
 )
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.plugins.precision import MixedPrecisionPlugin
+from pytorch_lightning.profilers import SimpleProfiler
 
 from cdvae.common.utils import PROJECT_ROOT, log_hyperparameters
 
@@ -167,6 +168,7 @@ def run(cfg: DictConfig):
         callbacks=callbacks,
         deterministic=cfg.train.deterministic,
         check_val_every_n_epoch=cfg.logging.val_check_interval,
+        profiler=SimpleProfiler(hydra_dir, "time_report"),
         # progress_bar_refresh_rate=cfg.logging.progress_bar_refresh_rate,
         # plugins=[MixedPrecisionPlugin('16', 'cuda')],
         # detect_anomaly=True,

@@ -15,7 +15,7 @@ pl_trainer:
   num_sanity_val_steps: 2
   gradient_clip_val: 0.5
   gradient_clip_algorithm: value
-  profiler: simple
+  enable_progress_bar: False
 
 monitor_metric: 'val_loss'
 monitor_metric_mode: 'min'
