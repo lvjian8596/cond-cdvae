@@ -1,8 +1,11 @@
 _target_: cdvae.pl_modules.model.CDVAE
-hidden_dim: 256
 latent_dim: 256
-fc_num_layers: 1
-lattice_dropout: 0.2
+lattice_recall:
+  in_dim: ${model.latent_dim}
+  hidden_dim: 256
+  fc_num_layers: 1
+  dropout: 0.2
+  out_dim: 6
 cost_natom: 1.
 cost_coord: 10.
 cost_type: 1.
@@ -25,6 +28,25 @@ predict_property: true
 defaults:
   - encoder: dimenet
   - decoder: gemnet
+
+prop_recall:
+  _target_: cdvae.pl_modules.recall_head.PropRecall
+  prop_keys: ${data.prop}
+  types:
+    energy_per_atom:
+      _target_: cdvae.pl_modules.recall_head.RecallScalar
+      prop_name: energy_per_atom
+      in_dim:
+      hidden_dim: 32
+      fc_num_layers: 3
+      out_dim: 1
+    enthalpy_per_atom:
+      _target_: cdvae.pl_modules.recall_head.RecallScalar
+      prop_name: enthalpy_per_atom
+      in_dim:
+      hidden_dim: 32
+      fc_num_layers: 3
+      out_dim: 1
 
 # agg z|c
 zgivenc:

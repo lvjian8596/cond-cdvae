@@ -27,6 +27,7 @@ from cdvae.pl_modules.conditioning import MultiEmbedding, ZGivenC
 from cdvae.pl_modules.decoder import GemNetTDecoder
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gnn import DimeNetPlusPlusWrap
+from cdvae.pl_modules.recall_head import PropRecall
 
 
 def detact_overflow(x: torch.Tensor, threshold, batch, label: str):
@@ -94,29 +95,17 @@ class CDVAE(BaseModule):
         # ======================= Decoder =======================
         hydra.utils.log.info("Initializing decoder ...")
         self.decoder: GemNetTDecoder = hydra.utils.instantiate(
-            self.hparams.decoder,
-            _recursive_=False,
-        )  # dynamic z dim
-        # ============ Lattice and other Recall head ===============
-        self.fc_lattice = build_mlp(
-            None,  # lazy model
-            self.hparams.hidden_dim,
-            self.hparams.fc_num_layers,
-            6,
-            self.hparams.lattice_dropout,
+            self.hparams.decoder, _recursive_=False
         )
+        # dynamic z dim
+        # ============ Lattice and other Recall head ===============
+        self.fc_lattice = build_mlp(**self.hparams.lattice_recall)
         if self.hparams.predict_property:
-            self.fc_property_before_cond = build_mlp(
-                self.hparams.latent_dim,
-                self.hparams.hidden_dim,
-                self.hparams.fc_num_layers,
-                1,
+            self.prop_recall_model_before_cond: PropRecall = hydra.utils.instantiate(
+                self.hparams.prop_recall, _recursive_=False
             )
-            self.fc_property_after_cond = build_mlp(
-                self.hparams.latent_dim,
-                self.hparams.hidden_dim,
-                self.hparams.fc_num_layers,
-                1,
+            self.prop_recall_model_after_cond: PropRecall = hydra.utils.instantiate(
+                self.hparams.prop_recall, _recursive_=False
             )
         # ===== split lattice lengths and angles =====
         # self.fc_lengths = build_mlp(
@@ -367,10 +356,14 @@ class CDVAE(BaseModule):
         c_dict = self.multiemb(conditions)  # dict of each condition vector
         cond_z = self.zgivenc(z, c_dict)  # z (B, *)
 
-        # if self.hparams.predict_property:
-        #     property_loss_before_cond =
-        # else:
-        #     property_loss = 0.
+        if self.hparams.predict_property:
+            pred_property_before_cond = self.prop_recall_model_before_cond(batch)
+            pred_property_after_cond = self.prop_recall_model_after_cond(batch)
+            prop_loss_before_cond = self.property_loss(pred_property_before_cond, batch)
+            prop_loss_after_cond = self.property_loss(pred_property_after_cond, batch)
+        else:
+            prop_loss_before_cond = 0.0
+            prop_loss_after_cond = 0.0
 
         if self.global_step % 20 == 1:
             log_cond_dict = {
@@ -450,6 +443,8 @@ class CDVAE(BaseModule):
             'target_atom_types': batch.atom_types,
             'rand_frac_coords': noisy_frac_coords,
             'z': z,
+            "prop_loss_before_cond": prop_loss_before_cond,
+            "prop_loss_after_cond": prop_loss_after_cond,
         }
 
     def predict_lattice(self, z, num_atoms):
@@ -481,6 +476,16 @@ class CDVAE(BaseModule):
             target_lengths_and_angles
         )
         return F.mse_loss(pred_lengths_and_angles, target_lengths_and_angles)
+
+    def property_loss(self, pred_property: dict, batch):
+        return torch.sum(
+            torch.tensor(
+                [
+                    F.mse_loss(pred_val, batch[prop_key])
+                    for prop_key, pred_val in pred_property.items()
+                ]
+            )
+        )
 
     def coord_loss(
         self,
@@ -561,11 +566,15 @@ class CDVAE(BaseModule):
         lattice_loss = outputs['lattice_loss']
         coord_loss = outputs['coord_loss']
         kld_loss = outputs['kld_loss']
+        prop_loss_before_cond = outputs["prop_loss_before_cond"]
+        prop_loss_after_cond = outputs["prop_loss_after_cond"]
 
         loss = (
             +self.hparams.cost_lattice * lattice_loss
             + self.hparams.cost_coord * coord_loss
             + self.hparams.beta * kld_loss
+            + self.hparams.cost_property * prop_loss_before_cond
+            + self.hparams.cost_property * prop_loss_after_cond
         )
         assert torch.isfinite(lattice_loss)
         assert torch.isfinite(coord_loss)
@@ -576,6 +585,8 @@ class CDVAE(BaseModule):
             f'{prefix}_lattice_loss': lattice_loss,
             f'{prefix}_coord_loss': coord_loss,
             f'{prefix}_kld_loss': kld_loss,
+            f"{prefix}_prop_loss_before_cond": prop_loss_before_cond,
+            f"{prefix}_prop_loss_after_cond": prop_loss_after_cond,
         }
 
         if prefix != 'train':
