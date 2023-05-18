@@ -73,7 +73,7 @@ def load_model(model_path, load_data=True, testing=True):
             logging=cfg.logging,
             _recursive_=False,
         )
-        dummybatch = next(iter(datamodule.train_dataloader()))
+        dummybatch = next(iter(test_loader))
         model.forward(dummybatch)  # initialize LazyModel
         ckpts = list(model_path.glob('*.ckpt'))
         if len(ckpts) > 0:

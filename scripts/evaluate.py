@@ -45,10 +45,10 @@ def reconstruction(
 
         # only sample one z, multiple evals for stoichaticity in langevin dynamics
         conditions = model.build_conditions(batch)
-        cond_vec = model.multiemb(conditions)
-        _, _, z = model.encode(batch, cond_vec)
+        c_dict = model.multiemb(conditions)
+        _, _, z = model.encode(batch, c_dict)
         # conditional z
-        cond_z = model.agg_cond(cond_vec, z)
+        cond_z = model.zgivenc(z, c_dict)  # z (B, *)
 
         for eval_idx in range(num_evals):
             gt_num_atoms = batch.num_atoms
@@ -170,9 +170,10 @@ def generation(
         batch_lengths, batch_angles = [], []
 
         # z & cond z
-        z = torch.randn(batch_size, model.hparams.hidden_dim, device=model.device)
-        cond_vec = model.multiemb(conditions)
-        cond_z = model.agg_cond(cond_vec, z)
+        c_dict = model.multiemb(conditions)
+        z = torch.randn(batch_size, model.hparams.latent_dim, device=model.device)
+        # conditional z
+        cond_z = model.zgivenc(z, c_dict)  # z (B, *)
 
         for sample_idx in range(num_samples_per_z):
             samples = model.langevin_dynamics(
