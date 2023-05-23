@@ -7,7 +7,7 @@ niggli: true
 primitive: false
 graph_method: crystalnn
 lattice_scale_method: scale_length
-preprocess_workers: 100
+preprocess_workers: 30
 readout: mean
 otf_graph: false
 eval_model_name: lj100
@@ -16,9 +16,9 @@ conditions:
   - energy_per_atom
 
 
-train_max_epochs: 1000
+train_max_epochs: 2000
 early_stopping_patience: 100000
-teacher_forcing_max_epoch: 500
+teacher_forcing_max_epoch: 250
 
 
 datamodule:
@@ -70,6 +70,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 128
-    val: 128
-    test: 128
+    train: 64
+    val: 64
+    test: 64
