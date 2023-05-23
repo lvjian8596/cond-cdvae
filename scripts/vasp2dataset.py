@@ -21,12 +21,16 @@ def read_outcar(outcar):
     except Exception:
         print(outcar, "NOT complete")
         return False
-    energy = atoms.get_potential_energy()  # energy sigma -> 0
+    with open(outcar, "r") as f:
+        for line in f.readlines():
+            if "enthalpy is  TOTEN" in line:
+                enthalpy0 = float(line.strip().split()[4])
+                break
     with open(outcar, "r") as f:
         for line in f.readlines()[::-1]:
-            if "P V" in line:
-                pv = float(line.strip().split()[-1])  # eV
-    enthalpy = energy + pv
+            if "enthalpy is  TOTEN" in line:
+                enthalpy = float(line.strip().split()[4])
+                break
     # _id = Path(outcar).stem[7:]  # OUTCAR_*.vasp
     _id = Path(outcar).parent.stem + '.vasp'  # *.run/OUTCAR_ -> *.vasp
     return {
@@ -34,10 +38,12 @@ def read_outcar(outcar):
             "formula": atoms.get_chemical_formula("metal"),
             "nsites": len(atoms),
             "volume": atoms.get_volume(),
-            "energy": energy,
+            # "energy": energy,
+            # "energy_per_atom": energy / len(atoms),
             "enthalpy": enthalpy,
-            "energy_per_atom": energy / len(atoms),
             "enthalpy_per_atom": enthalpy / len(atoms),
+            "enthalpy0": enthalpy0,
+            "enthalpy0_per_atom": enthalpy0 / len(atoms),
             "cif": atoms2cifstring(atoms),
         }
 
