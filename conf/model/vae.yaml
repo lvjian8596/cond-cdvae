@@ -1,7 +1,7 @@
 _target_: cdvae.pl_modules.model.CDVAE
 latent_dim: 256
 lattice_recall:
-  in_dim: ${model.latent_dim}
+  in_dim:
   hidden_dim: 256
   fc_num_layers: 1
   dropout: 0.2
