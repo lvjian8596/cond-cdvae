@@ -108,6 +108,13 @@ python cdvae/run.py \
     [model.conditions.cond_dim=...] \
 ```
 
+To train with multi-gpu:
+```bash
+CUDA_VISIBLE_DEVICES=0,1 python ... \
+    train.pl_trainer.devices=2 \
+    +train.pl_trainer.strategy=ddp_find_unused_parameters_true
+```
+
 To use other datasets, use `data=carbon` and `data=mp_20` instead.
 CDVAE uses [hydra](https://hydra.cc) to configure hyperparameters, and users can
 modify them with the command line or configure files in `conf/` folder.

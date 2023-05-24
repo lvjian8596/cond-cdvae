@@ -365,7 +365,7 @@ class CDVAE(BaseModule):
             prop_loss_before_cond = 0.0
             prop_loss_after_cond = 0.0
 
-        if self.global_step % 20 == 1:
+        if (self.global_rank == 0) and (self.global_step % 20 == 1):
             log_cond_dict = {
                 "cond/z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
                 "cond/z_std": wandb.Histogram(z.detach().cpu().std(0)),
@@ -536,8 +536,11 @@ class CDVAE(BaseModule):
         B = batch.num_graphs
         prog_key = ["train_loss", "val_loss", "test_loss"]
         prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
-        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
-        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        log_kwargs = {
+            "on_epoch": True, "batch_size": B, "prog_bar": True, "sync_dist": True
+        }
+        self.log_dict(prog_dict, **log_kwargs)
+        self.log_dict(log_dict, **log_kwargs)
         self.training_step_outputs.append(loss)
         return loss
 
@@ -547,8 +550,11 @@ class CDVAE(BaseModule):
         B = batch.num_graphs
         prog_key = ["train_loss", "val_loss", "test_loss"]
         prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
-        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
-        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        log_kwargs = {
+            "on_epoch": True, "batch_size": B, "prog_bar": True, "sync_dist": True
+        }
+        self.log_dict(prog_dict, **log_kwargs)
+        self.log_dict(log_dict, **log_kwargs)
         self.validation_step_outputs.append(loss)
         return loss
 
@@ -558,8 +564,11 @@ class CDVAE(BaseModule):
         B = batch.num_graphs
         prog_key = ["train_loss", "val_loss", "test_loss"]
         prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
-        self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
-        self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        log_kwargs = {
+            "on_epoch": True, "batch_size": B, "prog_bar": True, "sync_dist": True
+        }
+        self.log_dict(prog_dict, **log_kwargs)
+        self.log_dict(log_dict, **log_kwargs)
         return loss
 
     def compute_stats(self, batch, outputs, prefix):
