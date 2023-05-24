@@ -97,6 +97,19 @@ conditions:
       fc_num_layers: 5
       n_out: ${model.encoder.hidden_channels}
 
+    enthalpy_per_atom:
+      _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
+      prop_name: enthalpy_per_atom
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
+      batch_norm: true
+      n_basis: 50
+      start: -2
+      stop: 2
+      trainable_gaussians: false
+      no_expansion: false
+
     energy:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
       prop_name: energy
@@ -124,6 +137,19 @@ conditions:
       hidden_dim: ${model.encoder.hidden_channels}
       fc_num_layers: 5
       n_out: ${model.encoder.hidden_channels}
+
+    enthalpy:
+      _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
+      prop_name: enthalpy
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
+      batch_norm: true
+      n_basis: 50
+      start: -2
+      stop: 2
+      trainable_gaussians: false
+      no_expansion: false
 
     formation_energy_per_atom:
       _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
