@@ -30,6 +30,8 @@ def res2series(cif):
                 pres = 0.0
             else:
                 print(gdp, "NOT MATCH")
+            if ene is None:
+                raise Exception(f"energy error: {cif}")
     # gulp output file
     got = cif.with_suffix(".got")
     with open(got, "r") as gotf:

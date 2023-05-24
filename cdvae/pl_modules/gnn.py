@@ -1,4 +1,5 @@
-"""This module is adapted from https://github.com/Open-Catalyst-Project/ocp/tree/master/ocpmodels/models
+"""This module is adapted from
+https://github.com/Open-Catalyst-Project/ocp/tree/master/ocpmodels/models
 DimeNet++
 """
 import warnings
@@ -24,7 +25,6 @@ from cdvae.common.data_utils import (
     radius_graph_pbc_wrapper,
 )
 from cdvae.common.utils import PROJECT_ROOT
-from cdvae.pl_modules.conditioning import AtomwiseConditioning
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gemnet.gemnet import GemNetT
 from cdvae.pl_modules.gemnet.layers.embedding_block import AtomEmbedding
@@ -237,7 +237,6 @@ class DimeNetPlusPlus(torch.nn.Module):
     def __init__(
         self,
         out_channels,  # output dim, num_targets
-        cond_dim=128,  # condition vec dim
         hidden_channels=128,  # internal dim
         num_blocks=4,
         int_emb_size=64,
@@ -267,7 +266,6 @@ class DimeNetPlusPlus(torch.nn.Module):
         )
 
         self.atomemb = AtomEmbedding(hidden_channels)
-        self.atomwisecond = AtomwiseConditioning(cond_dim, hidden_channels)
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
         self.output_blocks = torch.nn.ModuleList(
@@ -344,7 +342,6 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
     def __init__(
         self,
         num_targets,
-        cond_dim=128,
         hidden_channels=128,
         num_blocks=4,
         int_emb_size=64,
@@ -370,7 +367,6 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
 
         super(DimeNetPlusPlusWrap, self).__init__(
             out_channels=num_targets,
-            cond_dim=cond_dim,
             hidden_channels=hidden_channels,
             num_blocks=num_blocks,
             int_emb_size=int_emb_size,
@@ -436,11 +432,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         rbf = self.rbf(dist)
         sbf = self.sbf(dist, angle, idx_kj)
 
-        # Embedding block.
-        if cond_vec is not None:
-            x = self.atomwisecond(cond_vec, data.atom_types, data.num_atoms)
-        else:
-            x = self.atomemb(data.atom_types.long())
+        x = self.atomemb(data.atom_types.long())
         x = self.emb(x, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 
@@ -450,8 +442,8 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         ):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
             P += output_block(x, rbf, i, num_nodes=pos.size(0))
-            assert torch.isfinite(x).all(), f"explosion in Interaction"
-            assert torch.isfinite(P).all(), f"explosion in Interaction"
+            assert torch.isfinite(x).all(), "explosion in Interaction"
+            assert torch.isfinite(P).all(), "explosion in Interaction"
 
         # Use mean
         if batch is None:

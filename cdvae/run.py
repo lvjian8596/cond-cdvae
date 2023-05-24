@@ -1,22 +1,22 @@
-from typing import List
 from pathlib import Path
+from typing import List
 
-import numpy as np
-import torch
 import hydra
+import numpy as np
 import omegaconf
 import pytorch_lightning as pl
+import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Callback, seed_everything
 from pytorch_lightning.callbacks import (
-    BatchSizeFinder,
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
 )
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.plugins.precision import MixedPrecisionPlugin
+from pytorch_lightning.profilers import SimpleProfiler
 
 from cdvae.common.utils import PROJECT_ROOT, log_hyperparameters
 
@@ -122,6 +122,11 @@ def run(cfg: DictConfig):
     model.prop_scalers = [scaler.copy() for scaler in datamodule.prop_scalers]
     torch.save(datamodule.prop_scalers, hydra_dir / 'prop_scalers.pt')
 
+    # forward dummy batch to initialize LazyModel
+    datamodule.setup()
+    dummybatch = next(iter(datamodule.train_dataloader()))
+    model.forward(dummybatch)
+
     # Instantiate the callbacks
     callbacks: List[Callback] = build_callbacks(cfg=cfg)
 
@@ -163,6 +168,7 @@ def run(cfg: DictConfig):
         callbacks=callbacks,
         deterministic=cfg.train.deterministic,
         check_val_every_n_epoch=cfg.logging.val_check_interval,
+        profiler=SimpleProfiler(hydra_dir, "time_report"),
         # progress_bar_refresh_rate=cfg.logging.progress_bar_refresh_rate,
         # plugins=[MixedPrecisionPlugin('16', 'cuda')],
         # detect_anomaly=True,

@@ -1,19 +1,22 @@
-root_path: ${oc.env:HOME}/Data/ljcluster/lj100/v2/rand20000
+root_path: ${oc.env:HOME}/Data/Carbon/Vasp-10GPa/SinglePoint/run.00/
 prop:
-  - energy_per_atom
+  - enthalpy_per_atom
 num_targets: 
   - 1
+# prop: scaled_lattice
+# num_targets: 6
 niggli: true
 primitive: false
 graph_method: crystalnn
 lattice_scale_method: scale_length
 preprocess_workers: 30
 readout: mean
+max_atoms: 24
 otf_graph: false
-eval_model_name: lj100
+eval_model_name: carbon
 conditions:
   - composition
-  - energy_per_atom
+  - enthalpy_per_atom
 
 
 train_max_epochs: 2000
@@ -70,6 +73,6 @@ datamodule:
     test: 0
 
   batch_size:
-    train: 64
-    val: 64
-    test: 64
+    train: 256
+    val: 256
+    test: 256

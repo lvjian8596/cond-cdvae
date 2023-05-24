@@ -23,10 +23,11 @@ from cdvae.common.data_utils import (
 )
 from cdvae.common.utils import PROJECT_ROOT
 from cdvae.pl_modules.basic_blocks import build_mlp
-from cdvae.pl_modules.conditioning import AggregateConditioning, MultiEmbedding
+from cdvae.pl_modules.conditioning import MultiEmbedding, ZGivenC
 from cdvae.pl_modules.decoder import GemNetTDecoder
 from cdvae.pl_modules.embeddings import KHOT_EMBEDDINGS, MAX_ATOMIC_NUM
 from cdvae.pl_modules.gnn import DimeNetPlusPlusWrap
+from cdvae.pl_modules.recall_head import PropRecall
 
 
 def detact_overflow(x: torch.Tensor, threshold, batch, label: str):
@@ -47,6 +48,8 @@ class BaseModule(pl.LightningModule):
         super().__init__()
         # populate self.hparams with args and kwargs automagically!
         self.save_hyperparameters()
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
 
     def configure_optimizers(self):
         opt = hydra.utils.instantiate(
@@ -79,35 +82,31 @@ class CDVAE(BaseModule):
             self.hparams.conditions,
             _recursive_=False,
         )
-        # =============================================================
+        self.zgivenc: ZGivenC = hydra.utils.instantiate(self.hparams.zgivenc)
+        # ======================= Encoder =============================
         self.encoder: DimeNetPlusPlusWrap = hydra.utils.instantiate(
             self.hparams.encoder,
             num_targets=self.hparams.latent_dim,
-            cond_dim=self.hparams.conditions.cond_dim,
         )
-        # ==================== Aggregate ====================
-        self.agg_cond = AggregateConditioning(
-            self.hparams.conditions.cond_dim,
-            self.hparams.latent_dim,
-            self.hparams.conditions.mode,
-        )
-        # ===================================================
+        # ==================== mu & std ==========================
         self.fc_mu = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         self.fc_var = nn.Linear(self.hparams.latent_dim, self.hparams.latent_dim)
         hydra.utils.log.info("Initializing encoder done")
-
+        # ======================= Decoder =======================
         hydra.utils.log.info("Initializing decoder ...")
         self.decoder: GemNetTDecoder = hydra.utils.instantiate(
-            self.hparams.decoder,
-            _recursive_=False,
+            self.hparams.decoder, _recursive_=False
         )
-        self.fc_lattice = build_mlp(
-            self.hparams.latent_dim,
-            self.hparams.hidden_dim,
-            self.hparams.fc_num_layers,
-            6,
-            self.hparams.lattice_dropout,
-        )
+        # dynamic z dim
+        # ============ Lattice and other Recall head ===============
+        self.fc_lattice = build_mlp(**self.hparams.lattice_recall)
+        if self.hparams.predict_property:
+            self.prop_recall_model_before_cond: PropRecall = hydra.utils.instantiate(
+                self.hparams.prop_recall, _recursive_=False
+            )
+            self.prop_recall_model_after_cond: PropRecall = hydra.utils.instantiate(
+                self.hparams.prop_recall, _recursive_=False
+            )
         # ===== split lattice lengths and angles =====
         # self.fc_lengths = build_mlp(
         #     self.hparams.latent_dim,
@@ -191,10 +190,6 @@ class CDVAE(BaseModule):
 
         mu = self.fc_mu(hidden)
         log_var = self.fc_var(hidden)
-
-        # debug
-        detact_overflow(mu, 100, batch, "mu")
-        detact_overflow(log_var, 100, batch, "log_var")
 
         z = self.reparameterize(mu, log_var)
         return mu, log_var, z
@@ -350,30 +345,37 @@ class CDVAE(BaseModule):
         return samples
 
     def forward(self, batch, teacher_forcing=False, training=True):
-        # conditional z
-        conditions = self.build_conditions(batch)
-        cond_vec = self.multiemb(conditions)
-
         # hacky way to resolve the NaN issue. Will need more careful debugging later.
         # mu, log_var, z = self.encode(batch, cond_vec)
         # Do not add condition in Encode step
         mu, log_var, z = self.encode(batch, None)
         assert torch.isfinite(z).all()
 
-        # z (B, lattent_dim)
-        cond_z = self.agg_cond(cond_vec, z)
+        # z|c
+        conditions = self.build_conditions(batch)
+        c_dict = self.multiemb(conditions)  # dict of each condition vector
+        cond_z = self.zgivenc(z, c_dict)  # z (B, *)
 
-        wandb.log(
-            {
-                "cond/cond_vec_mean": wandb.Histogram(cond_vec.detach().cpu().mean(0)),
-                "cond/cond_vec_std": wandb.Histogram(cond_vec.detach().cpu().std(0)),
+        if self.hparams.predict_property:
+            pred_property_before_cond = self.prop_recall_model_before_cond(batch)
+            pred_property_after_cond = self.prop_recall_model_after_cond(batch)
+            prop_loss_before_cond = self.property_loss(pred_property_before_cond, batch)
+            prop_loss_after_cond = self.property_loss(pred_property_after_cond, batch)
+        else:
+            prop_loss_before_cond = 0.0
+            prop_loss_after_cond = 0.0
+
+        if self.global_step % 20 == 1:
+            log_cond_dict = {
                 "cond/z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
                 "cond/z_std": wandb.Histogram(z.detach().cpu().std(0)),
-                "cond/cond_z_mean": wandb.Histogram(z.detach().cpu().mean(0)),
-                "cond/cond_z_std": wandb.Histogram(z.detach().cpu().std(0)),
-            },
-            step=self.global_step,
-        )
+                "cond/cond_z_mean": wandb.Histogram(cond_z.detach().cpu().mean(0)),
+                "cond/cond_z_std": wandb.Histogram(cond_z.detach().cpu().std(0)),
+            }
+            wandb.log(
+                log_cond_dict,
+                step=self.global_step,
+            )
 
         # pred lattice from cond_z
         # (B, 6)                 (B, 3)        (B, 3)
@@ -441,6 +443,8 @@ class CDVAE(BaseModule):
             'target_atom_types': batch.atom_types,
             'rand_frac_coords': noisy_frac_coords,
             'z': z,
+            "prop_loss_before_cond": prop_loss_before_cond,
+            "prop_loss_after_cond": prop_loss_after_cond,
         }
 
     def predict_lattice(self, z, num_atoms):
@@ -472,6 +476,16 @@ class CDVAE(BaseModule):
             target_lengths_and_angles
         )
         return F.mse_loss(pred_lengths_and_angles, target_lengths_and_angles)
+
+    def property_loss(self, pred_property: dict, batch):
+        return torch.sum(
+            torch.tensor(
+                [
+                    F.mse_loss(pred_val, batch[prop_key])
+                    for prop_key, pred_val in pred_property.items()
+                ]
+            )
+        )
 
     def coord_loss(
         self,
@@ -524,6 +538,7 @@ class CDVAE(BaseModule):
         prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
         self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
         self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        self.training_step_outputs.append(loss)
         return loss
 
     def validation_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
@@ -534,6 +549,7 @@ class CDVAE(BaseModule):
         prog_dict = {key: log_dict.pop(key) for key in prog_key if key in log_dict}
         self.log_dict(prog_dict, on_epoch=True, batch_size=B, prog_bar=True)
         self.log_dict(log_dict, on_epoch=True, batch_size=B, prog_bar=False)
+        self.validation_step_outputs.append(loss)
         return loss
 
     def test_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
@@ -550,11 +566,15 @@ class CDVAE(BaseModule):
         lattice_loss = outputs['lattice_loss']
         coord_loss = outputs['coord_loss']
         kld_loss = outputs['kld_loss']
+        prop_loss_before_cond = outputs["prop_loss_before_cond"]
+        prop_loss_after_cond = outputs["prop_loss_after_cond"]
 
         loss = (
             +self.hparams.cost_lattice * lattice_loss
             + self.hparams.cost_coord * coord_loss
             + self.hparams.beta * kld_loss
+            + self.hparams.cost_property * prop_loss_before_cond
+            + self.hparams.cost_property * prop_loss_after_cond
         )
         assert torch.isfinite(lattice_loss)
         assert torch.isfinite(coord_loss)
@@ -565,6 +585,8 @@ class CDVAE(BaseModule):
             f'{prefix}_lattice_loss': lattice_loss,
             f'{prefix}_coord_loss': coord_loss,
             f'{prefix}_kld_loss': kld_loss,
+            f"{prefix}_prop_loss_before_cond": prop_loss_before_cond,
+            f"{prefix}_prop_loss_after_cond": prop_loss_after_cond,
         }
 
         if prefix != 'train':
@@ -601,6 +623,22 @@ class CDVAE(BaseModule):
             )
 
         return log_dict, loss
+
+    def on_train_epoch_end(self):
+        # do something with all training_step outputs, for example:
+        trn_loss_epoch_mean = torch.stack(self.training_step_outputs).mean().item()
+        val_loss_epoch_mean = (
+            torch.stack(self.validation_step_outputs).mean().item()
+            if len(self.validation_step_outputs) != 0
+            else None
+        )
+        print(
+            f"{self.current_epoch=} {self.global_step=} "
+            f"{trn_loss_epoch_mean=} {val_loss_epoch_mean=}"
+        )
+        # free up the memory
+        self.training_step_outputs.clear()
+        self.validation_step_outputs.clear()
 
 
 class CrystGNN_Supervise(BaseModule):
