@@ -173,9 +173,6 @@ def generation(
             sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
             sampled_atom_types = torch.hstack(sampled_atom_types)
             sampled_atom_types = sampled_atom_types.to(model.device)
-            print(sampled_atom_types)
-            print(sampled_num_atoms)
-            assert 1 == 2
         elif train_data is not None:  # load cached data
             cached_data = pickle.load(open(train_data, 'rb'))
 
