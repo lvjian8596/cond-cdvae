@@ -310,6 +310,13 @@ def main(args):
         load_data=('recon' in args.tasks)
         or ('opt' in args.tasks and args.start_from == 'data'),
     )
+    print(cfg.data.prop)
+    prop_scalers = model.prop_scalers
+    for prop_key, scaler in zip(cfg.data.prop, prop_scalers):
+        if prop_key == "pressure":
+            # relative pressure
+            rel_pressure = (args.pressure - scaler.means.item()) / scaler.stds.item()
+            break
     ld_kwargs = SimpleNamespace(
         n_step_each=args.n_step_each,
         step_lr=args.step_lr,
@@ -388,7 +395,7 @@ def main(args):
                 'energy': args.energy,
                 'enthalpy_per_atom': args.enthalpy_per_atom,
                 'enthalpy': args.enthalpy,
-                'pressure': args.pressure,
+                'pressure': rel_pressure,
             },
         )
 
@@ -469,7 +476,7 @@ if __name__ == '__main__':
         '--enthalpy', default=-1, type=float, help="relative std, default -1"
     )
     parser.add_argument(
-        '--pressure', default=-1, type=float, help="relative std, default -1"
+        '--pressure', default=0.0, type=float, help="absolute value (GPa), default 0.0"
     )
 
     args = parser.parse_args()
