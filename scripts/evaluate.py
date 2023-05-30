@@ -1,12 +1,14 @@
 import argparse
 import pickle
 import random
+import re
 import time
 from collections import Counter
-from itertools import chain
+from itertools import chain, zip_longest
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import torch
 from eval_utils import composition2atom_types, load_model
 from pymatgen.core.composition import Composition, Element
@@ -104,6 +106,38 @@ def reconstruction(
     )
 
 
+pat = re.compile(r"\d+\-\d+")
+
+
+def sample_formula_range(string: str):
+    """sample a formula from range
+
+    Parameters
+    ----------
+    string : str
+        formula string with range (e.g. H4-8O2-4, (H2O)2-4, (H2O)1-2(CaO)3-4 ...)
+
+    Returns
+    -------
+    str
+        formula string without range
+    """
+    nrange = pat.findall(string)
+    if len(nrange) == 0:
+        return string
+    else:
+        parts = re.split(pat, string)
+        string = ""
+        for irange, part in zip_longest(nrange, parts):
+            if irange is None:
+                ni = ""
+            else:
+                start, stop = tuple(map(int, irange.split("-")))
+                ni = str(np.random.randint(start, stop + 1))
+            string += f"{part}{ni}"
+        return string
+
+
 def generation(
     model,
     ld_kwargs,
@@ -128,11 +162,16 @@ def generation(
         if not (formula is None) ^ (train_data is None):
             raise Exception("formula and train_data should only specify one")
         elif formula is not None:
-            comp = Composition(formula)
-            specified_atom_types = torch.tensor(composition2atom_types(comp))
-            sampled_num_atoms = [len(specified_atom_types)] * batch_size  # (B,)
+            formula_list = [sample_formula_range(formula) for _ in range(batch_size)]
+            sampled_num_atoms = []
+            sampled_atom_types = []
+            for formula in formula_list:
+                comp = Composition(formula)
+                specified_atom_types = torch.tensor(composition2atom_types(comp))
+                sampled_num_atoms.append(len(specified_atom_types))
+                sampled_atom_types.append(specified_atom_types)
             sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
-            sampled_atom_types = specified_atom_types.tile(batch_size)  # (Nnode,)
+            sampled_atom_types = torch.hstack(sampled_atom_types)
             sampled_atom_types = sampled_atom_types.to(model.device)
         elif train_data is not None:  # load cached data
             cached_data = pickle.load(open(train_data, 'rb'))
@@ -271,6 +310,13 @@ def main(args):
         load_data=('recon' in args.tasks)
         or ('opt' in args.tasks and args.start_from == 'data'),
     )
+    print(cfg.data.prop)
+    prop_scalers = model.prop_scalers
+    for prop_key, scaler in zip(cfg.data.prop, prop_scalers):
+        if prop_key == "pressure":
+            # relative pressure
+            rel_pressure = (args.pressure - scaler.means.item()) / scaler.stds.item()
+            break
     ld_kwargs = SimpleNamespace(
         n_step_each=args.n_step_each,
         step_lr=args.step_lr,
@@ -349,7 +395,7 @@ def main(args):
                 'energy': args.energy,
                 'enthalpy_per_atom': args.enthalpy_per_atom,
                 'enthalpy': args.enthalpy,
-                'pressure': args.pressure,
+                'pressure': rel_pressure,
             },
         )
 
@@ -410,7 +456,7 @@ if __name__ == '__main__':
     parser.add_argument('--force_atom_types', action='store_true')
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
-    parser.add_argument('--formula', help="formula to generate")
+    parser.add_argument('--formula', help="formula to generate, range is acceptable")
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     parser.add_argument(
         '--placeholder',
@@ -430,7 +476,7 @@ if __name__ == '__main__':
         '--enthalpy', default=-1, type=float, help="relative std, default -1"
     )
     parser.add_argument(
-        '--pressure', default=-1, type=float, help="relative std, default -1"
+        '--pressure', default=0.0, type=float, help="absolute value (GPa), default 0.0"
     )
 
     args = parser.parse_args()
