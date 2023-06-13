@@ -105,7 +105,6 @@ class CrystDataModule(pl.LightningDataModule):
                 test_dataset.lattice_scaler = self.lattice_scaler
                 test_dataset.prop_scalers = self.prop_scalers
 
-
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_dataset,

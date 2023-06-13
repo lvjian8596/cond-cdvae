@@ -152,3 +152,18 @@ conditions:
       hidden_dim: ${model.encoder.hidden_channels}
       fc_num_layers: 5
       n_out: ${model.encoder.hidden_channels}
+
+    # [1, 230] -> [-1, 1], (n - 115.5) / 115
+    spgno:
+      _target_: cdvae.pl_modules.conditioning.ScalarEmbedding
+      prop_name: spgno
+      batch_norm: false
+      no_expansion: false
+      n_basis: 50
+      start: -1
+      stop: 1
+      trainable_gaussians: false
+      no_mlp: true
+      hidden_dim: ${model.encoder.hidden_channels}
+      fc_num_layers: 5
+      n_out: ${model.encoder.hidden_channels}
