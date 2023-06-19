@@ -482,7 +482,8 @@ def radius_graph_pbc(
     # position of the atoms
     atom_pos = cart_coords
 
-    # Before computing the pairwise distances between atoms, first create a list of atom indices to compare for the entire batch
+    # Before computing the pairwise distances between atoms, first create a list
+    # of atom indices to compare for the entire batch
     num_atoms_per_image = num_atoms
     num_atoms_per_image_sqr = (num_atoms_per_image**2).long()
 
@@ -498,11 +499,19 @@ def radius_graph_pbc(
         num_atoms_per_image, num_atoms_per_image_sqr
     )
 
-    # Compute a tensor containing sequences of numbers that range from 0 to num_atoms_per_image_sqr for each image
-    # that is used to compute indices for the pairs of atoms. This is a very convoluted way to implement
+    # Compute a tensor containing sequences of numbers that range from 0 to
+    # num_atoms_per_image_sqr for each image
+    # that is used to compute indices for the pairs of atoms. This is a very
+    # convoluted way to implement
     # the following (but 10x faster since it removes the for loop)
     # for batch_idx in range(batch_size):
-    #    batch_count = torch.cat([batch_count, torch.arange(num_atoms_per_image_sqr[batch_idx], device=device)], dim=0)
+    #     batch_count = torch.cat(
+    #         [
+    #             batch_count,
+    #             torch.arange(num_atoms_per_image_sqr[batch_idx], device=device)
+    #         ],
+    #         dim=0,
+    #     )
     num_atom_pairs = torch.sum(num_atoms_per_image_sqr)
     index_sqr_offset = (
         torch.cumsum(num_atoms_per_image_sqr, dim=0) - num_atoms_per_image_sqr
@@ -515,7 +524,8 @@ def radius_graph_pbc(
     )
 
     # Compute the indices for the pairs of atoms (using division and mod)
-    # If the systems get too large this apporach could run into numerical precision issues
+    # If the systems get too large this apporach could run into numerical
+    # precision issues
     # index1 = (
     #     (atom_count_sqr // num_atoms_per_image_expand)
     # ).long() + index_offset_expand
@@ -634,8 +644,10 @@ def radius_graph_pbc(
 
     atom_distance_sqr = torch.masked_select(atom_distance_sqr, mask)
 
-    # Create a tensor of size [num_atoms, max_num_neighbors] to sort the distances of the neighbors.
-    # Fill with values greater than radius*radius so we can easily remove unused distances later.
+    # Create a tensor of size [num_atoms, max_num_neighbors] to sort the distances of
+    # the neighbors.
+    # Fill with values greater than radius*radius so we can easily remove unused
+    # distances later.
     distance_sort = torch.zeros(
         len(cart_coords) * max_num_neighbors, device=device
     ).fill_(radius * radius + 1.0)
@@ -667,12 +679,14 @@ def radius_graph_pbc(
     mask_within_radius = torch.le(distance_sort, radius * radius)
     index_sort = torch.masked_select(index_sort, mask_within_radius)
 
-    # At this point index_sort contains the index into index1 of the closest max_num_neighbors_threshold neighbors per atom
+    # At this point index_sort contains the index into index1 of the closest
+    # max_num_neighbors_threshold neighbors per atom
     # Create a mask to remove all pairs not in index_sort
     mask_num_neighbors = torch.zeros(len(index1), device=device).bool()
     mask_num_neighbors.index_fill_(0, index_sort, True)
 
-    # Finally mask out the atoms to ensure each atom has at most max_num_neighbors_threshold neighbors
+    # Finally mask out the atoms to ensure each atom has at most
+    # max_num_neighbors_threshold neighbors
     index1 = torch.masked_select(index1, mask_num_neighbors)
     index2 = torch.masked_select(index2, mask_num_neighbors)
     unit_cell = torch.masked_select(
@@ -702,15 +716,17 @@ def min_distance_sqr_pbc(
     return_to_jimages=False,
 ):
     """Compute the pbc distance between atoms in cart_coords1 and cart_coords2.
-    This function assumes that cart_coords1 and cart_coords2 have the same number of atoms
-    in each data point.
+    This function assumes that cart_coords1 and cart_coords2 have the same number of
+    atoms in each data point.
     returns:
         basic return:
             min_atom_distance_sqr: (N_atoms, )
         return_vector == True:
-            min_atom_distance_vector: vector pointing from cart_coords1 to cart_coords2, (N_atoms, 3)
+            min_atom_distance_vector: vector pointing from cart_coords1 to
+            cart_coords2, (N_atoms, 3)
         return_to_jimages == True:
-            to_jimages: (N_atoms, 3), position of cart_coord2 relative to cart_coord1 in pbc
+            to_jimages: (N_atoms, 3), position of cart_coord2 relative to
+            cart_coord1 in pbc
     """
     batch_size = len(num_atoms)
 
@@ -720,9 +736,9 @@ def min_distance_sqr_pbc(
 
     unit_cell = torch.tensor(OFFSET_LIST, device=device).float()
     num_cells = len(unit_cell)
-    unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(
-        len(cart_coords2), 1, 1
-    )
+    # unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(
+    #     len(cart_coords2), 1, 1
+    # )
     unit_cell = torch.transpose(unit_cell, 0, 1)
     unit_cell_batch = unit_cell.view(1, 3, num_cells).expand(batch_size, -1, -1)
 
@@ -811,8 +827,12 @@ class StandardScalerTorch(object):
 
 def get_scaler_from_data_list(data_list, key):
     targets = torch.tensor(np.array([d[key] for d in data_list]))
-    scaler = StandardScalerTorch()
-    scaler.fit(targets)
+    if key == "spgno":
+        means, stds = torch.tensor(115.5), torch.tensor(115.)
+        scaler = StandardScalerTorch(means, stds)
+    else:
+        scaler = StandardScalerTorch()
+        scaler.fit(targets)
     return scaler
 
 
@@ -991,9 +1011,12 @@ class StandardScaler:
 
     def transform(self, X):
         """
-        Transforms the data by subtracting the means and dividing by the standard deviations.
+        Transforms the data by subtracting the means and dividing by the standard
+        deviations.
+
         :param X: A list of lists of floats (or None).
-        :return: The transformed data with NaNs replaced by :code:`self.replace_nan_token`.
+        :return: The transformed data with NaNs replaced \
+            by :code:`self.replace_nan_token`.
         """
         X = np.array(X).astype(float)
         transformed_with_nan = (X - self.means) / self.stds
@@ -1007,9 +1030,11 @@ class StandardScaler:
 
     def inverse_transform(self, X):
         """
-        Performs the inverse transformation by multiplying by the standard deviations and adding the means.
+        Performs the inverse transformation by multiplying by the standard deviations
+        and adding the means.
         :param X: A list of lists of floats.
-        :return: The inverse transformed data with NaNs replaced by :code:`self.replace_nan_token`.
+        :return: The inverse transformed data with NaNs replaced \
+            by :code:`self.replace_nan_token`.
         """
         X = np.array(X).astype(float)
         transformed_with_nan = X * self.stds + self.means
