@@ -312,12 +312,16 @@ def main(args):
     )
     print(cfg.data.prop)
     prop_scalers = model.prop_scalers
+
+    rel_pressure = 0.0
+    rel_spgno = 0.0
     for prop_key, scaler in zip(cfg.data.prop, prop_scalers):
         if prop_key == "pressure":
             # relative pressure
             rel_pressure = (args.pressure - scaler.means.item()) / scaler.stds.item()
         elif prop_key == "spgno":
             rel_spgno = (args.spgno - scaler.means.item()) / scaler.stds.item()
+
     ld_kwargs = SimpleNamespace(
         n_step_each=args.n_step_each,
         step_lr=args.step_lr,
