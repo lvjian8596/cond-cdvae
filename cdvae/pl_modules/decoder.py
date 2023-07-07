@@ -22,6 +22,7 @@ class GemNetTDecoder(nn.Module):
 
     def __init__(
         self,
+        num_blocks=3,
         hidden_dim=128,
         latent_dim=256,
         max_neighbors=20,
@@ -33,6 +34,7 @@ class GemNetTDecoder(nn.Module):
         self.max_num_neighbors = max_neighbors
 
         self.gemnet = GemNetT(
+            num_blocks=num_blocks,
             num_targets=1,
             latent_dim=latent_dim,
             emb_size_atom=hidden_dim,
