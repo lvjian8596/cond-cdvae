@@ -214,9 +214,7 @@ def build_crystal(crystal_str, niggli=True, primitive=False):
 def build_crystal_graph(crystal, graph_method='crystalnn'):
     """ """
     if graph_method == 'crystalnn':
-        crystal_graph = StructureGraph.with_local_env_strategy(
-            crystal, CrystalNN
-        )
+        crystal_graph = StructureGraph.with_local_env_strategy(crystal, CrystalNN)
     elif graph_method == 'none':
         pass
     else:
@@ -346,9 +344,7 @@ def compute_volume(batch_lattice):
     """
     vector_a, vector_b, vector_c = torch.unbind(batch_lattice, dim=1)
     return torch.abs(
-        torch.einsum(
-            'bi,bi->b', vector_a, torch.cross(vector_b, vector_c, dim=1)
-        )
+        torch.einsum('bi,bi->b', vector_a, torch.cross(vector_b, vector_c, dim=1))
     )
 
 
@@ -364,9 +360,7 @@ def lattice_matrix_to_params(matrix):
     for i in range(3):
         j = (i + 1) % 3
         k = (i + 2) % 3
-        angles[i] = abs_cap(
-            np.dot(matrix[j], matrix[k]) / (lengths[j] * lengths[k])
-        )
+        angles[i] = abs_cap(np.dot(matrix[j], matrix[k]) / (lengths[j] * lengths[k]))
     angles = np.arccos(angles) * 180.0 / np.pi
     a, b, c = lengths
     alpha, beta, gamma = angles
@@ -488,13 +482,9 @@ def radius_graph_pbc(
     num_atoms_per_image_sqr = (num_atoms_per_image**2).long()
 
     # index offset between images
-    index_offset = (
-        torch.cumsum(num_atoms_per_image, dim=0) - num_atoms_per_image
-    )
+    index_offset = torch.cumsum(num_atoms_per_image, dim=0) - num_atoms_per_image
 
-    index_offset_expand = torch.repeat_interleave(
-        index_offset, num_atoms_per_image_sqr
-    )
+    index_offset_expand = torch.repeat_interleave(index_offset, num_atoms_per_image_sqr)
     num_atoms_per_image_expand = torch.repeat_interleave(
         num_atoms_per_image, num_atoms_per_image_sqr
     )
@@ -519,9 +509,7 @@ def radius_graph_pbc(
     index_sqr_offset = torch.repeat_interleave(
         index_sqr_offset, num_atoms_per_image_sqr
     )
-    atom_count_sqr = (
-        torch.arange(num_atom_pairs, device=device) - index_sqr_offset
-    )
+    atom_count_sqr = torch.arange(num_atom_pairs, device=device) - index_sqr_offset
 
     # Compute the indices for the pairs of atoms (using division and mod)
     # If the systems get too large this apporach could run into numerical
@@ -535,18 +523,14 @@ def radius_graph_pbc(
         ).long()
         + index_offset_expand
     )
-    index2 = (
-        atom_count_sqr % num_atoms_per_image_expand
-    ).long() + index_offset_expand
+    index2 = (atom_count_sqr % num_atoms_per_image_expand).long() + index_offset_expand
     # Get the positions for each atom
     pos1 = torch.index_select(atom_pos, 0, index1)
     pos2 = torch.index_select(atom_pos, 0, index2)
 
     unit_cell = torch.tensor(OFFSET_LIST, device=device).float()
     num_cells = len(unit_cell)
-    unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(
-        len(index2), 1, 1
-    )
+    unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(len(index2), 1, 1)
     unit_cell = torch.transpose(unit_cell, 0, 1)
     unit_cell_batch = unit_cell.view(1, 3, num_cells).expand(batch_size, -1, -1)
 
@@ -583,8 +567,7 @@ def radius_graph_pbc(
             + torch.arange(num_atom_pairs, device=device)[:, None] * num_cells
         ).view(-1)
         topk_mask = (
-            torch.arange(num_cells, device=device)[None, :]
-            < topk_per_pair[:, None]
+            torch.arange(num_cells, device=device)[None, :] < topk_per_pair[:, None]
         )
         topk_mask = topk_mask.view(-1)
         topk_indices = atom_distance_sqr_sort_index.masked_select(topk_mask)
@@ -623,9 +606,7 @@ def radius_graph_pbc(
     _natoms = torch.zeros(num_atoms.shape[0] + 1, device=device).long()
     _num_neighbors[1:] = torch.cumsum(_max_neighbors, dim=0)
     _natoms[1:] = torch.cumsum(num_atoms, dim=0)
-    num_neighbors_image = (
-        _num_neighbors[_natoms[1:]] - _num_neighbors[_natoms[:-1]]
-    )
+    num_neighbors_image = _num_neighbors[_natoms[1:]] - _num_neighbors[_natoms[:-1]]
 
     # If max_num_neighbors is below the threshold, return early
     if (
@@ -748,9 +729,7 @@ def min_distance_sqr_pbc(
     # Compute the x, y, z positional offsets for each cell in each image
     data_cell = torch.transpose(lattice, 1, 2)
     pbc_offsets = torch.bmm(data_cell, unit_cell_batch)
-    pbc_offsets_per_atom = torch.repeat_interleave(
-        pbc_offsets, num_atoms, dim=0
-    )
+    pbc_offsets_per_atom = torch.repeat_interleave(pbc_offsets, num_atoms, dim=0)
 
     # Expand the positions and indices for the 9 cells
     pos1 = pos1.view(-1, 3, 1).expand(-1, -1, num_cells)
@@ -828,7 +807,7 @@ class StandardScalerTorch(object):
 def get_scaler_from_data_list(data_list, key):
     targets = torch.tensor(np.array([d[key] for d in data_list]))
     if key == "spgno":
-        means, stds = torch.tensor(115.5), torch.tensor(115.)
+        means, stds = torch.tensor(115.5), torch.tensor(115.0)
         scaler = StandardScalerTorch(means, stds)
     else:
         scaler = StandardScalerTorch()
@@ -836,9 +815,7 @@ def get_scaler_from_data_list(data_list, key):
     return scaler
 
 
-def preprocess(
-    input_file, num_workers, niggli, primitive, graph_method, prop_list
-):
+def preprocess(input_file, num_workers, niggli, primitive, graph_method, prop_list):
     suffix = Path(input_file).suffix
     if suffix == '.csv':
         df = pd.read_csv(input_file)
@@ -885,9 +862,7 @@ def preprocess_tensors(crystal_array_list, niggli, primitive, graph_method):
         lengths = crystal_array['lengths']
         angles = crystal_array['angles']
         crystal = Structure(
-            lattice=Lattice.from_parameters(
-                *(lengths.tolist() + angles.tolist())
-            ),
+            lattice=Lattice.from_parameters(*(lengths.tolist() + angles.tolist())),
             species=atom_types,
             coords=frac_coords,
             coords_are_cartesian=False,
@@ -909,9 +884,7 @@ def preprocess_tensors(crystal_array_list, niggli, primitive, graph_method):
         num_cpus=30,
         ncols=79,
     )
-    ordered_results = list(
-        sorted(unordered_results, key=lambda x: x['batch_idx'])
-    )
+    ordered_results = list(sorted(unordered_results, key=lambda x: x['batch_idx']))
     return ordered_results
 
 
@@ -937,14 +910,8 @@ def mard(targets, preds):
     return torch.mean(torch.abs(targets - preds) / targets)
 
 
-def batch_accuracy_precision_recall(
-    pred_edge_probs, edge_overlap_mask, num_bonds
-):
-    if (
-        pred_edge_probs is None
-        and edge_overlap_mask is None
-        and num_bonds is None
-    ):
+def batch_accuracy_precision_recall(pred_edge_probs, edge_overlap_mask, num_bonds):
+    if pred_edge_probs is None and edge_overlap_mask is None and num_bonds is None:
         return 0.0, 0.0, 0.0
     pred_edges = pred_edge_probs.max(dim=1)[1].float()
     target_edges = edge_overlap_mask.float()
@@ -952,17 +919,11 @@ def batch_accuracy_precision_recall(
     start_idx = 0
     accuracies, precisions, recalls = [], [], []
     for num_bond in num_bonds.tolist():
-        pred_edge = (
-            pred_edges.narrow(0, start_idx, num_bond).detach().cpu().numpy()
-        )
-        target_edge = (
-            target_edges.narrow(0, start_idx, num_bond).detach().cpu().numpy()
-        )
+        pred_edge = pred_edges.narrow(0, start_idx, num_bond).detach().cpu().numpy()
+        target_edge = target_edges.narrow(0, start_idx, num_bond).detach().cpu().numpy()
 
         accuracies.append(accuracy_score(target_edge, pred_edge))
-        precisions.append(
-            precision_score(target_edge, pred_edge, average='binary')
-        )
+        precisions.append(precision_score(target_edge, pred_edge, average='binary'))
         recalls.append(recall_score(target_edge, pred_edge, average='binary'))
 
         start_idx = start_idx + num_bond
@@ -1000,12 +961,8 @@ class StandardScaler:
         self.means = np.where(
             np.isnan(self.means), np.zeros(self.means.shape), self.means
         )
-        self.stds = np.where(
-            np.isnan(self.stds), np.ones(self.stds.shape), self.stds
-        )
-        self.stds = np.where(
-            self.stds == 0, np.ones(self.stds.shape), self.stds
-        )
+        self.stds = np.where(np.isnan(self.stds), np.ones(self.stds.shape), self.stds)
+        self.stds = np.where(self.stds == 0, np.ones(self.stds.shape), self.stds)
 
         return self
 
