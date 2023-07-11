@@ -177,6 +177,7 @@ class OutputPPBlock(torch.nn.Module):
         out_channels,
         num_layers,
         act=nn.SiLU(),
+        outact=None,
     ):
         super(OutputPPBlock, self).__init__()
         self.act = act
@@ -187,6 +188,14 @@ class OutputPPBlock(torch.nn.Module):
         for _ in range(num_layers):
             self.lins.append(nn.Linear(out_emb_channels, out_emb_channels))
         self.lin = nn.Linear(out_emb_channels, out_channels, bias=False)
+        if outact is None or outact.lower() == "none":
+            self.outact = nn.Identity()
+        elif outact.lower() == 'tanh':
+            self.outact = nn.Tanh()
+        elif outact.lower() == 'sigmoid':
+            self.outact = nn.Sigmoid()
+        else:
+            raise ValueError(f"Unsuported outact type: {outact}")
 
         self.reset_parameters()
 
@@ -204,7 +213,9 @@ class OutputPPBlock(torch.nn.Module):
         x = self.lin_up(x)
         for lin in self.lins:
             x = self.act(lin(x))
-        return self.lin(x)
+        x = self.lin(x)
+        x = self.outact(x)
+        return x
 
 
 class DimeNetPlusPlus(torch.nn.Module):
@@ -250,6 +261,7 @@ class DimeNetPlusPlus(torch.nn.Module):
         num_after_skip=2,
         num_output_layers=3,
         act=nn.SiLU(),
+        outact=None,
     ):
         super(DimeNetPlusPlus, self).__init__()
 
@@ -277,6 +289,7 @@ class DimeNetPlusPlus(torch.nn.Module):
                     out_channels,
                     num_output_layers,
                     act,
+                    outact,
                 )
                 for _ in range(num_blocks + 1)
             ]
@@ -357,6 +370,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
         num_after_skip=2,
         num_output_layers=3,
         readout='mean',
+        outact=None,
     ):
         self.num_targets = num_targets
         self.cutoff = cutoff
@@ -379,6 +393,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
             num_before_skip=num_before_skip,
             num_after_skip=num_after_skip,
             num_output_layers=num_output_layers,
+            outact=outact,
         )
 
     def forward(self, data, cond_vec=None):
@@ -441,7 +456,7 @@ class DimeNetPlusPlusWrap(DimeNetPlusPlus):
             self.interaction_blocks, self.output_blocks[1:]
         ):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
-            P += output_block(x, rbf, i, num_nodes=pos.size(0))
+            P = P + output_block(x, rbf, i, num_nodes=pos.size(0))
             assert torch.isfinite(x).all(), "explosion in Interaction"
             assert torch.isfinite(P).all(), "explosion in Interaction"
 
