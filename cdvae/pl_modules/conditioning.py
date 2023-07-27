@@ -116,11 +116,9 @@ class GaussianExpansion(nn.Module):
         # compute offset and width of Gaussian functions
         offset = torch.linspace(start, stop, n_gaussians)
         if width is None:
-            widths = torch.FloatTensor(
-                (offset[1] - offset[0]) * torch.ones_like(offset)
-            )
+            widths = (offset[1] - offset[0]) * torch.ones_like(offset)
         else:
-            widths = torch.FloatTensor(width * torch.ones_like(offset))
+            widths = width * torch.ones_like(offset)
         if trainable:
             self.widths = nn.Parameter(widths)
             self.offsets = nn.Parameter(offset)

@@ -123,7 +123,7 @@ class CDVAE(BaseModule):
         # ============================================
         hydra.utils.log.info("Initializing decoder done")
 
-        sigmas = torch.tensor(
+        sigmas = torch.Tensor(
             np.exp(
                 np.linspace(
                     np.log(self.hparams.sigma_begin),
@@ -131,12 +131,11 @@ class CDVAE(BaseModule):
                     self.hparams.num_noise_level,
                 )
             ),
-            dtype=torch.float32,
         )
 
         self.sigmas = nn.Parameter(sigmas, requires_grad=False)
 
-        type_sigmas = torch.tensor(
+        type_sigmas = torch.Tensor(
             np.exp(
                 np.linspace(
                     np.log(self.hparams.type_sigma_begin),
@@ -144,15 +143,14 @@ class CDVAE(BaseModule):
                     self.hparams.num_noise_level,
                 )
             ),
-            dtype=torch.float32,
         )
 
         self.type_sigmas = nn.Parameter(type_sigmas, requires_grad=False)
 
         # obtain from datamodule.
         self.lattice_scaler = StandardScalerTorch(
-            torch.tensor(0),
-            torch.tensor(1),
+            torch.tensor(0, dtype=torch.get_default_dtype()),
+            torch.tensor(1, dtype=torch.get_default_dtype()),
         )
         self.prop_scalers = []
 

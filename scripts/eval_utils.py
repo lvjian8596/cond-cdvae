@@ -13,6 +13,7 @@ from scipy.spatial.distance import cdist, pdist
 from smact.screening import pauling_test
 from torch_geometric.data import DataLoader
 
+from cdvae.common.utils import set_precision
 from cdvae.common.constants import CompScalerMeans, CompScalerStds
 from cdvae.common.data_utils import StandardScaler, chemical_symbols
 from cdvae.pl_data.datamodule import worker_init_fn
@@ -55,6 +56,7 @@ def load_config(model_path):
 def load_model(model_path, load_data=True, testing=True):
     with initialize_config_dir(str(model_path), version_base="1.1"):
         cfg = compose(config_name='hparams')
+        set_precision(cfg.model.prec)
 
         datamodule = hydra.utils.instantiate(
             cfg.data.datamodule, _recursive_=False, scaler_path=model_path
@@ -73,8 +75,10 @@ def load_model(model_path, load_data=True, testing=True):
             logging=cfg.logging,
             _recursive_=False,
         )
-        dummybatch = next(iter(test_loader))
-        model.forward(dummybatch)  # initialize LazyModel
+
+        # dummybatch = next(iter(test_loader))
+        # model.forward(dummybatch)  # initialize LazyModel
+
         ckpts = list(model_path.glob('*.ckpt'))
         if len(ckpts) > 0:
             ckpt_epochs = np.array(

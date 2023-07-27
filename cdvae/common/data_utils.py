@@ -420,7 +420,9 @@ def get_pbc_distances(
 
     # correct for pbc
     lattice_edges = torch.repeat_interleave(lattice, num_bonds, dim=0)
-    offsets = torch.einsum('bi,bij->bj', to_jimages.float(), lattice_edges)
+    offsets = torch.einsum(
+        'bi,bij->bj', to_jimages.to(torch.get_default_dtype()), lattice_edges
+    )
     distance_vectors += offsets
 
     # compute distances
@@ -528,7 +530,9 @@ def radius_graph_pbc(
     pos1 = torch.index_select(atom_pos, 0, index1)
     pos2 = torch.index_select(atom_pos, 0, index2)
 
-    unit_cell = torch.tensor(OFFSET_LIST, device=device).float()
+    unit_cell = torch.tensor(
+        OFFSET_LIST, device=device, dtype=torch.get_default_dtype()
+    )
     num_cells = len(unit_cell)
     unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(len(index2), 1, 1)
     unit_cell = torch.transpose(unit_cell, 0, 1)
@@ -715,7 +719,9 @@ def min_distance_sqr_pbc(
     pos1 = cart_coords1
     pos2 = cart_coords2
 
-    unit_cell = torch.tensor(OFFSET_LIST, device=device).float()
+    unit_cell = torch.tensor(
+        OFFSET_LIST, device=device, dtype=torch.get_default_dtype()
+    )
     num_cells = len(unit_cell)
     # unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(
     #     len(cart_coords2), 1, 1
@@ -767,23 +773,23 @@ class StandardScalerTorch(object):
 
     def __init__(self, means=None, stds=None):
         self.means = means
-        self.stds = stds
+        self.stds = means
 
     def fit(self, X):
-        # X = torch.tensor(X, dtype=torch.float)
-        X = X.float().clone().detach()
+        assert isinstance(X, torch.Tensor)
+        X = X.clone().detach()
         self.means = torch.mean(X, dim=0)
         # https://github.com/pytorch/pytorch/issues/29372
         self.stds = torch.std(X, dim=0, unbiased=False) + EPSILON
 
     def transform(self, X):
-        # X = torch.tensor(X, dtype=torch.float)
-        X = X.clone().detach().float()
+        assert isinstance(X, torch.Tensor)
+        X = X.clone().detach()
         return (X - self.means) / self.stds
 
     def inverse_transform(self, X):
-        # X = torch.tensor(X, dtype=torch.float)
-        X = X.clone().detach().float()
+        assert isinstance(X, torch.Tensor)
+        X = X.clone().detach()
         return X * self.stds + self.means
 
     def match_device(self, tensor):
@@ -805,9 +811,11 @@ class StandardScalerTorch(object):
 
 
 def get_scaler_from_data_list(data_list, key):
-    targets = torch.tensor(np.array([d[key] for d in data_list]))
+    targets = torch.tensor(
+        np.array([d[key] for d in data_list]), dtype=torch.get_default_dtype()
+    )
     if key == "spgno":
-        means, stds = torch.tensor(115.5), torch.tensor(115.0)
+        means, stds = 115.5, 115.0
         scaler = StandardScalerTorch(means, stds)
     else:
         scaler = StandardScalerTorch()

@@ -197,7 +197,9 @@ def generation(
             sampled_num_atoms = torch.tensor(sampled_num_atoms, device=model.device)
         # return `sampled_atom_types` and `sampled_num_atoms`
         conditions = {
-            k: torch.tensor([v] * batch_size, device=model.device).view(-1, 1).float()
+            k: torch.tensor(
+                [v] * batch_size, device=model.device, dtype=torch.get_default_dtype()
+            ).view(-1, 1)
             for k, v in norm_target_props.items()
         }
         conditions['composition'] = (sampled_atom_types, sampled_num_atoms)
@@ -310,7 +312,9 @@ def main(args):
         load_data=('recon' in args.tasks)
         or ('opt' in args.tasks and args.start_from == 'data'),
     )
+    print("lattice scaler: ", model.lattice_scaler)
     print(cfg.data.prop)
+    print("prop scaler: ", model.lattice_scaler)
     prop_scalers = model.prop_scalers
 
     rel_pressure = 0.0

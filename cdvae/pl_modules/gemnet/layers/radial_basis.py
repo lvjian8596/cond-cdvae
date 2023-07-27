@@ -82,9 +82,7 @@ class SphericalBesselBasis(torch.nn.Module):
 
         # Initialize frequencies at canonical positions
         self.frequencies = torch.nn.Parameter(
-            data=torch.tensor(
-                np.pi * np.arange(1, num_radial + 1, dtype=np.float32)
-            ),
+            data=torch.tensor(np.pi * np.arange(1, num_radial + 1), dtype=torch.get_default_dtype()),
             requires_grad=True,
         )
 
@@ -122,12 +120,12 @@ class BernsteinBasis(torch.nn.Module):
         prefactor = binom(num_radial - 1, np.arange(num_radial))
         self.register_buffer(
             "prefactor",
-            torch.tensor(prefactor, dtype=torch.float),
+            torch.tensor(prefactor, dtype=torch.get_default_dtype()),
             persistent=False,
         )
 
         self.pregamma = torch.nn.Parameter(
-            data=torch.tensor(pregamma_initial, dtype=torch.float),
+            data=torch.tensor(pregamma_initial, dtype=torch.get_default_dtype()),
             requires_grad=True,
         )
         self.softplus = torch.nn.Softplus()

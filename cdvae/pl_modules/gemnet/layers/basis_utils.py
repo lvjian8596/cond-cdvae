@@ -22,10 +22,10 @@ def Jn_zeros(n, k):
     """
     Compute the first k zeros of the spherical bessel functions up to order n (excluded)
     """
-    zerosj = np.zeros((n, k), dtype="float32")
+    zerosj = np.zeros((n, k))
     zerosj[0] = np.arange(1, k + 1) * np.pi
     points = np.arange(1, k + n) * np.pi
-    racines = np.zeros(k + n - 1, dtype="float32")
+    racines = np.zeros(k + n - 1)
     for i in range(1, n):
         for j in range(k + n - 1 - i):
             foo = brentq(Jn, points[j], points[j + 1], (i,))

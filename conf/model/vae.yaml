@@ -1,4 +1,5 @@
 _target_: cdvae.pl_modules.model.CDVAE
+prec: 32
 latent_dim: 256
 lattice_recall:
   in_dim:
