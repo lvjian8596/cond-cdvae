@@ -3,8 +3,19 @@ from pathlib import Path
 from typing import Optional
 
 import dotenv
+import torch
 import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
+
+
+def set_precision(prec=32):
+    if prec == 32:
+        torch.set_default_dtype(torch.float32)
+    elif prec == 64:
+        torch.set_default_dtype(torch.float64)
+    else:
+        raise ValueError(f"Unkown precission: {prec}")
+    print(f"Set default tensor type: {prec=}")
 
 
 def get_env(env_name: str, default: Optional[str] = None) -> str:

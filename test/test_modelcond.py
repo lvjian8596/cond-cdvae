@@ -164,8 +164,16 @@ class TestModelCond(unittest.TestCase):
                 ).items()
             )
         )
-        num_atoms = torch.tensor([len(each_atom_types)] * n_sample, device=model.device)
-        atom_types = torch.tensor(each_atom_types * n_sample, device=model.device)
+        num_atoms = torch.tensor(
+            [len(each_atom_types)] * n_sample,
+            device=model.device,
+            dtype=torch.get_default_dtype(),
+        )
+        atom_types = torch.tensor(
+            each_atom_types * n_sample,
+            device=model.device,
+            dtype=torch.get_default_dtype(),
+        )
         sample_conditions = {
             'composition': (atom_types, num_atoms),
             'energy_per_atom': torch.ones(n_sample, 1, device=model.device) * 0.1,

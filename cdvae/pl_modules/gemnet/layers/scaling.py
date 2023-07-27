@@ -31,7 +31,6 @@ class AutomaticFit:
 
         # first instance created
         if AutomaticFit.fitting_mode and not self._fitted:
-
             # if first layer set to active
             if AutomaticFit.activeVar is None:
                 AutomaticFit.activeVar = self
@@ -86,7 +85,9 @@ class AutomaticFit:
             self._fitted = True
             logging.debug(f"Set scale factor {self._name} : {value}")
             with torch.no_grad():
-                self.variable.copy_(torch.tensor(value))
+                self.variable.copy_(
+                    torch.tensor(value, dtype=torch.get_default_dtype())
+                )
 
 
 class AutoScaleFit(AutomaticFit):
@@ -124,14 +125,8 @@ class AutoScaleFit(AutomaticFit):
         # only track stats for current variable
         if AutomaticFit.activeVar == self:
             nSamples = y.shape[0]
-            self.variance_in += (
-                torch.mean(torch.var(x, dim=0)).to(dtype=torch.float32)
-                * nSamples
-            )
-            self.variance_out += (
-                torch.mean(torch.var(y, dim=0)).to(dtype=torch.float32)
-                * nSamples
-            )
+            self.variance_in += torch.mean(torch.var(x, dim=0)) * nSamples
+            self.variance_out += torch.mean(torch.var(y, dim=0)) * nSamples
             self.nSamples += nSamples
 
     @torch.no_grad()
@@ -160,9 +155,7 @@ class AutoScaleFit(AutomaticFit):
 
             # set variable to calculated value
             self.variable.copy_(self.variable * value)
-            update_json(
-                self.scale_file, {self._name: float(self.variable.item())}
-            )
+            update_json(self.scale_file, {self._name: float(self.variable.item())})
             self.set_next_active()  # set next variable in queue to active
 
 
@@ -182,7 +175,8 @@ class ScalingFactor(torch.nn.Module):
         super().__init__()
 
         self.scale_factor = torch.nn.Parameter(
-            torch.tensor(1.0, device=device), requires_grad=False
+            torch.tensor(1.0, device=device, dtype=torch.get_default_dtype()),
+            requires_grad=False,
         )
         self.autofit = AutoScaleFit(self.scale_factor, scale_file, name)
 

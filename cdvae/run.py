@@ -15,17 +15,15 @@ from pytorch_lightning.callbacks import (
     ModelCheckpoint,
 )
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.plugins.precision import MixedPrecisionPlugin
+from pytorch_lightning.plugins.precision import (
+    DoublePrecisionPlugin,
+    MixedPrecisionPlugin,
+)
 from pytorch_lightning.profilers import SimpleProfiler
 
-from cdvae.common.utils import PROJECT_ROOT, log_hyperparameters
+from cdvae.common.utils import PROJECT_ROOT, log_hyperparameters, set_precision
 
 torch.multiprocessing.set_sharing_strategy('file_system')
-
-# from torch import _dynamo
-#
-# _dynamo.config.verbose = True
-# _dynamo.config.suppress_errors = True
 
 
 def build_callbacks(cfg: DictConfig) -> List[Callback]:
@@ -74,6 +72,8 @@ def run(cfg: DictConfig):
 
     :param cfg: run configuration, defined by Hydra in /conf
     """
+    set_precision(cfg.model.prec)
+
     if cfg.train.deterministic:
         seed_everything(cfg.train.random_seed)
 
@@ -171,6 +171,7 @@ def run(cfg: DictConfig):
         profiler=SimpleProfiler(hydra_dir, "time_report"),
         # progress_bar_refresh_rate=cfg.logging.progress_bar_refresh_rate,
         # plugins=[MixedPrecisionPlugin('16', 'cuda')],
+        # plugins=[DoublePrecisionPlugin],
         # detect_anomaly=True,
         **cfg.train.pl_trainer,
     )

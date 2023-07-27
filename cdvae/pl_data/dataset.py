@@ -72,7 +72,9 @@ class CrystDataset(Dataset):
 
         # scaler is set in DataModule set stage
         p_dict = {
-            p: prop_scaler.transform(torch.tensor(data_dict[p]).view(1, -1))
+            p: prop_scaler.transform(
+                torch.tensor(data_dict[p], dtype=torch.get_default_dtype()).view(1, -1)
+            )
             for p, prop_scaler in zip(self.prop, self.prop_scalers, strict=True)
         }
 
@@ -90,12 +92,13 @@ class CrystDataset(Dataset):
         # edge_index is incremented during batching
         # https://pytorch-geometric.readthedocs.io/en/latest/notes/batching.html
         data = Data(
-            frac_coords=torch.Tensor(frac_coords),
-            atom_types=torch.LongTensor(atom_types),
-            lengths=torch.Tensor(lengths).view(1, -1),
-            angles=torch.Tensor(angles).view(1, -1),
-            edge_index=torch.LongTensor(edge_indices.T).contiguous(),  # (2, num_edges)
-            to_jimages=torch.LongTensor(to_jimages),
+            frac_coords=torch.tensor(frac_coords, dtype=torch.get_default_dtype()),
+            atom_types=torch.tensor(atom_types, dtype=torch.int64),
+            lengths=torch.tensor(lengths, dtype=torch.get_default_dtype()).view(1, -1),
+            angles=torch.tensor(angles, dtype=torch.get_default_dtype()).view(1, -1),
+            edge_index=torch.tensor(edge_indices.T, dtype=torch.int64).contiguous(),
+            # (2, num_edges)
+            to_jimages=torch.tensor(to_jimages, dtype=torch.int64),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
             num_nodes=num_atoms,  # special attribute used for batching in pyg
@@ -108,6 +111,7 @@ class CrystDataset(Dataset):
         return f"CrystDataset({self.name=}, {self.path=}, {self.save_path=})"
 
 
+# Warning: Never used, do not use
 class TensorCrystDataset(Dataset):
     def __init__(
         self,
@@ -161,7 +165,8 @@ class TensorCrystDataset(Dataset):
             lengths=torch.Tensor(lengths).view(1, -1),
             angles=torch.Tensor(angles).view(1, -1),
             edge_index=torch.LongTensor(
-                edge_indices.T).contiguous(),  # shape (2, num_edges)
+                edge_indices.T
+            ).contiguous(),  # shape (2, num_edges)
             to_jimages=torch.LongTensor(to_jimages),
             num_atoms=num_atoms,
             num_bonds=edge_indices.shape[0],
