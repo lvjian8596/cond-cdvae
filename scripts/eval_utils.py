@@ -56,7 +56,7 @@ def load_config(model_path):
 def load_model(model_path, load_data=True, testing=True):
     with initialize_config_dir(str(model_path), version_base="1.1"):
         cfg = compose(config_name='hparams')
-        set_precision(cfg.model.prec)
+        set_precision(cfg.model.get('prec', 32))
 
         datamodule = hydra.utils.instantiate(
             cfg.data.datamodule, _recursive_=False, scaler_path=model_path
