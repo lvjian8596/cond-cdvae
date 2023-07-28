@@ -58,15 +58,18 @@ def load_model(model_path, load_data=True, testing=True):
         cfg = compose(config_name='hparams')
         set_precision(cfg.model.get('prec', 32))
 
-        datamodule = hydra.utils.instantiate(
-            cfg.data.datamodule, _recursive_=False, scaler_path=model_path
-        )
-        if testing:
-            datamodule.setup('test')
-            test_loader = datamodule.test_dataloader()[0]
+        if load_data:
+            datamodule = hydra.utils.instantiate(
+                cfg.data.datamodule, _recursive_=False, scaler_path=model_path
+            )
+            if testing:
+                datamodule.setup('test')
+                test_loader = datamodule.test_dataloader()[0]
+            else:
+                datamodule.setup()
+                test_loader = datamodule.val_dataloader()[0]
         else:
-            datamodule.setup()
-            test_loader = datamodule.val_dataloader()[0]
+            test_loader = None
 
         model = hydra.utils.instantiate(
             cfg.model,
