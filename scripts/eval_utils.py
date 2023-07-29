@@ -8,6 +8,7 @@ import smact
 import torch
 from hydra import initialize_config_dir
 from hydra import compose
+from omegaconf import OmegaConf
 from pymatgen.core.composition import Composition, Element
 from scipy.spatial.distance import cdist, pdist
 from smact.screening import pauling_test
@@ -53,20 +54,23 @@ def load_config(model_path):
     return cfg
 
 
-def load_model(model_path, load_data=True, testing=True):
+def load_model(model_path, load_data=False, testing=True):
     with initialize_config_dir(str(model_path), version_base="1.1"):
         cfg = compose(config_name='hparams')
-        set_precision(cfg.model.prec)
+        set_precision(cfg.model.get('prec', 32))
 
-        datamodule = hydra.utils.instantiate(
-            cfg.data.datamodule, _recursive_=False, scaler_path=model_path
-        )
-        if testing:
-            datamodule.setup('test')
-            test_loader = datamodule.test_dataloader()[0]
+        if load_data:
+            datamodule = hydra.utils.instantiate(
+                cfg.data.datamodule, _recursive_=False, scaler_path=model_path
+            )
+            if testing:
+                datamodule.setup('test')
+                test_loader = datamodule.test_dataloader()[0]
+            else:
+                datamodule.setup()
+                test_loader = datamodule.val_dataloader()[0]
         else:
-            datamodule.setup()
-            test_loader = datamodule.val_dataloader()[0]
+            test_loader = None
 
         model = hydra.utils.instantiate(
             cfg.model,
@@ -82,13 +86,12 @@ def load_model(model_path, load_data=True, testing=True):
         ckpts = list(model_path.glob('*.ckpt'))
         if len(ckpts) > 0:
             ckpt_epochs = np.array(
-                [
-                    int(ckpt.parts[-1].split('-')[0].split('=')[1])
-                    for ckpt in ckpts
-                ]
+                [int(ckpt.parts[-1].split('-')[0].split('=')[1]) for ckpt in ckpts]
             )
             ckpt = str(ckpts[ckpt_epochs.argsort()[-1]])
-        model = model.load_from_checkpoint(ckpt)
+        model = model.__class__.load_from_checkpoint(
+            ckpt, **OmegaConf.to_object(cfg.model)
+        )
         model.lattice_scaler = torch.load(model_path / 'lattice_scaler.pt')
         model.prop_scalers = torch.load(model_path / 'prop_scalers.pt')
 
@@ -188,7 +191,6 @@ def get_fp_pdist(fp_array):
 
 
 def prop_model_eval(eval_model_name, crystal_array_list):
-
     model_path = get_model_path(eval_model_name)
 
     model, _, _ = load_model(model_path)
@@ -239,9 +241,7 @@ def filter_fps(struc_fps, comp_fps):
     return filtered_struc_fps, filtered_comp_fps
 
 
-def compute_cov(
-    crys, gt_crys, struc_cutoff, comp_cutoff, num_gen_crystals=None
-):
+def compute_cov(crys, gt_crys, struc_cutoff, comp_cutoff, num_gen_crystals=None):
     struc_fps = [c.struct_fp for c in crys]
     comp_fps = [c.comp_fp for c in crys]
     gt_struc_fps = [c.struct_fp for c in gt_crys]

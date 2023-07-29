@@ -72,7 +72,7 @@ def run(cfg: DictConfig):
 
     :param cfg: run configuration, defined by Hydra in /conf
     """
-    set_precision(cfg.model.prec)
+    set_precision(cfg.model.get('prec', 32))
 
     if cfg.train.deterministic:
         seed_everything(cfg.train.random_seed)
