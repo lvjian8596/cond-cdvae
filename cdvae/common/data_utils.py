@@ -773,7 +773,7 @@ class StandardScalerTorch(object):
 
     def __init__(self, means=None, stds=None):
         self.means = means
-        self.stds = means
+        self.stds = stds
 
     def fit(self, X):
         assert isinstance(X, torch.Tensor)
