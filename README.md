@@ -1,6 +1,6 @@
-Clone from [Xie](https://github.com/txie-93/cdvae)
-
 # Crystal Diffusion Variational AutoEncoder
+
+**Clone from [Xie](https://github.com/txie-93/cdvae)**
 
 This software implementes Crystal Diffusion Variational AutoEncoder (CDVAE), which generates the periodic structure of materials.
 
@@ -11,27 +11,16 @@ It has several main functionalities:
 
 [[Paper]](https://arxiv.org/abs/2110.06197) [[Datasets]](data/)
 
-<p align="center">
-  <img src="assets/illustrative.png" /> 
-</p>
-
-<p align="center">
-  <img src="assets/Tm4Ni4As4.gif" width="200">
-</p>
-
-
 ## Table of Contents
 
 - [Crystal Diffusion Variational AutoEncoder](#crystal-diffusion-variational-autoencoder)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
     - [Install with pip](#install-with-pip)
-    - [Install with conda](#install-with-conda)
     - [Setting up environment variables](#setting-up-environment-variables)
   - [Datasets](#datasets)
   - [Training CDVAE](#training-cdvae)
     - [Training without a property predictor](#training-without-a-property-predictor)
-    - [Training with a property predictor](#training-with-a-property-predictor)
   - [Generating materials](#generating-materials)
   - [Evaluating model](#evaluating-model)
   - [Authors and acknowledgements](#authors-and-acknowledgements)
@@ -42,29 +31,15 @@ It has several main functionalities:
 
 ### Install with pip
 
-CUDA11.8
+(torch2.0.1+cu118 for example)
 
 It is suggested to use `conda` (by [conda](https://conda.io/docs/index.html) or [miniconda](https://docs.conda.io/en/latest/miniconda.html))
-to create a python3.10 environment first,
-then run the following `pip` commands in this environment.
+to create a python>=3.8(3.11 is suggested) environment first, then run the following `pip` commands in this environment.
 
 ```bash
-pip install torch torchaudio torchvision -i https://download.pytorch.org/whl/cu118
+pip install torch -i https://download.pytorch.org/whl/cu118
 pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.0+cu118.html
-pip install lightning torch_geometric
-pip install ase black hydra-core matminer matplotlib networkx omegaconf p-tqdm pandas pyarrow
-pip install pymatgen python-dotenv scikit-learn scipy smact sympy tqdm wandb yapf
-pip install -e .
-```
-
-### Install with conda
-
-CUDA11.7
-
-The easiest way to install prerequisites is via [conda](https://conda.io/docs/index.html).
-
-```bash
-conda env create -f environment-v2.yaml
+pip install -r requirements.txt
 pip install -e .
 ```
 
@@ -74,12 +49,10 @@ Modify the following environment variables in file `.env`.
 
 - `PROJECT_ROOT`: path to the folder that contains this repo
 - `HYDRA_JOBS`: path to a folder to store hydra outputs
-- `WANDB`: path to a folder to store wandb outputs
 
 ```env
-PROJECT_ROOT="/home/..."
-HYDRA_JOBS="/home/..."
-WANDB="/home/..."
+PROJECT_ROOT="<project root>"  # `pwd` for example
+HYDRA_JOBS="<project root>/log"  # in project root for example
 ```
 
 ## Datasets
@@ -98,19 +71,23 @@ To train a CDVAE, run the following command:
 python cdvae/run.py \
     model=vae/vae_nocond \  # vae is default
     project=... group=... expname=... \
-    data=... \
-    optim.optimizer.lr=1e-7 optim.lr_scheduler.min_lr=1e-7 \
+    data=... \  # file name without .yml suffix in ./conf/data/
+    optim.optimizer.lr=1e-4 optim.lr_scheduler.min_lr=1e-5 \
     data.teacher_forcing_max_epoch=250 data.train_max_epochs=4000 \
     model.beta=0.01 \
-    model.fc_num_layers=1 model.latent_dim=... 
+    model.fc_num_layers=1 model.latent_dim=... \
     model.hidden_dim=... model.lattice_dropout=... \  # MLP part
     model.hidden_dim=... model.latent_dim=... \
     [model.conditions.cond_dim=...] \
 ```
 
+For more control options see `./conf`
+
 To train with multi-gpu:
+
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 python ... \
+CUDA_VISIBLE_DEVICES=0,1 python cdvae/run.py \
+    ... \  # can take the same options as before
     train.pl_trainer.devices=2 \
     +train.pl_trainer.strategy=ddp_find_unused_parameters_true
 ```
@@ -123,7 +100,7 @@ After training, model checkpoints can be found in `$HYDRA_JOBS/singlerun/project
 
 ## Generating materials
 
-To generate materials, run recon first:
+To generate materials, run recon first (can skip):
 
 ```bash
 python scripts/evaluate.py --model_path MODEL_PATH --tasks recon
@@ -156,7 +133,7 @@ python scripts/evaluate.py --model_path MODEL_PATH --tasks gen \
 
 To compute evaluation metrics, run the following command:
 
-```
+```bash
 python scripts/compute_metrics.py --root_path MODEL_PATH --tasks recon gen opt
 ```
 
@@ -176,7 +153,7 @@ For the datasets, [Perov-5](data/perov_5) is curated from [Perovksite water-spli
 
 Please consider citing the following paper if you find our code & data useful.
 
-```
+```text
 @article{xie2021crystal,
   title={Crystal Diffusion Variational Autoencoder for Periodic Material Generation},
   author={Xie, Tian and Fu, Xiang and Ganea, Octavian-Eugen and Barzilay, Regina and Jaakkola, Tommi},
