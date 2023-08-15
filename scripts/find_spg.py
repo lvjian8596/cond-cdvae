@@ -74,11 +74,11 @@ def to_format_csv(df: pd.DataFrame):
     return output
 
 
-def write_std_vasp(df: pd.DataFrame):
+def write_std_vasp(df: pd.DataFrame, indir):
     cols = [col for col in df if col.endswith("_std_vasp")]
     prec_list = [col[:-9] for col in cols]
     for prec in prec_list:
-        prec_dir = Path(f"std_{prec}")
+        prec_dir = Path(indir).with_name(f"std_{prec}")
         prec_dir.mkdir(exist_ok=True)
         for _, ser in df.iterrows():
             with open(prec_dir / Path(ser['name']).name, "w") as fvasp:
@@ -97,9 +97,9 @@ def write_std_vasp(df: pd.DataFrame):
 def cli_get_spg(indir, symprec):
     df = get_spg(indir, symprec)
     csv = to_format_csv(df)
-    with open("spg.txt", 'w') as f:
+    with open(Path(indir).with_name("spg.txt"), 'w') as f:
         f.write(csv)
-    write_std_vasp(df)
+    write_std_vasp(df, indir)
 
 
 if __name__ == '__main__':
