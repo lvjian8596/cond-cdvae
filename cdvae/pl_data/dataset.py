@@ -23,7 +23,6 @@ class CrystDataset(Dataset):
         self,
         name: ValueNode,
         path: ValueNode,  # original crystal info
-        save_path: ValueNode,  # processed graph data
         force_process: ValueNode,  # process or load
         prop: ValueNode,  # list
         niggli: ValueNode,
@@ -35,7 +34,6 @@ class CrystDataset(Dataset):
     ):
         super().__init__()
         self.path = path
-        self.save_path = save_path
         self.force_process = force_process
         self.name = name
         self.prop = prop
@@ -43,9 +41,10 @@ class CrystDataset(Dataset):
         self.primitive = primitive
         self.graph_method = graph_method
         self.lattice_scale_method = lattice_scale_method
+        pkl_path = Path(path).with_suffix(".pkl")  # processed pkl path
 
-        if self.force_process or not Path(self.save_path).exists():
-            hydra.utils.log.info(f"Dumping into {self.save_path} ...")
+        if self.force_process or not pkl_path.exists():
+            hydra.utils.log.info(f"Dumping into {pkl_path} ...")
             self.cached_data = preprocess(
                 self.path,
                 preprocess_workers,
@@ -54,10 +53,10 @@ class CrystDataset(Dataset):
                 graph_method=self.graph_method,
                 prop_list=prop,
             )
-            pickle.dump(self.cached_data, open(self.save_path, 'wb'))
+            pickle.dump(self.cached_data, open(pkl_path, 'wb'))
         else:
-            hydra.utils.log.info(f"Loading from {self.save_path} ...")
-            self.cached_data = pickle.load(open(self.save_path, 'rb'))
+            hydra.utils.log.info(f"Loading from {pkl_path} ...")
+            self.cached_data = pickle.load(open(pkl_path, 'rb'))
 
         add_scaled_lattice_prop(self.cached_data, lattice_scale_method)
         self.lattice_scaler = None
