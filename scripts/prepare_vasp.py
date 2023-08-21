@@ -8,16 +8,20 @@ from tqdm import tqdm
 
 
 def prepare_task(structure, relax_path, PSTRESS, NSW):
+    user_incar_settings={
+        'NSW': NSW,
+        'LREAL': False,
+        'ISMEAR': 0,
+        'EDIFF': 1e-6,
+        'EDIFFG': -0.01,
+        'PSTRESS': PSTRESS,
+    }
+    if NSW > 1:
+        user_incar_settings["ISYM"] = 0
+
     mp_set = MPRelaxSet(
         structure,
-        user_incar_settings={
-            'NSW': NSW,
-            'LREAL': False,
-            'ISMEAR': 0,
-            'EDIFF': 1e-6,
-            'EDIFFG': 0.01,
-            'PSTRESS': PSTRESS,
-        },
+        user_incar_settings=user_incar_settings,
         user_potcar_settings={"W": "W_sv"},
         user_potcar_functional="PBE_54",
     )
