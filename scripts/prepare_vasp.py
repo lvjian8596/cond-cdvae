@@ -15,6 +15,7 @@ def prepare_task(structure, relax_path, PSTRESS, NSW):
         'EDIFF': 1e-6,
         'EDIFFG': -0.01,
         'PSTRESS': PSTRESS,
+        'NCORE': 4,
     }
     if NSW > 1:
         user_incar_settings["ISYM"] = 0
