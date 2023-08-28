@@ -157,12 +157,13 @@ def generation(
     lengths = []
     angles = []
 
+    formulabak = formula  # a backup
     for z_idx in range(num_batches_to_sample):
         # init args for this batch
-        if not (formula is None) ^ (train_data is None):
+        if not (formulabak is None) ^ (train_data is None):
             raise Exception("formula and train_data should only specify one")
-        elif formula is not None:
-            formula_list = [sample_formula_range(formula) for _ in range(batch_size)]
+        elif formulabak is not None:
+            formula_list = [sample_formula_range(formulabak) for _ in range(batch_size)]
             sampled_num_atoms = []
             sampled_atom_types = []
             for formula in formula_list:
