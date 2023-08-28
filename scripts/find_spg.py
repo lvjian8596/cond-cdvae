@@ -31,7 +31,7 @@ def atoms2vasp(atoms):
 def get_spg_one(name, atoms, symprec_list, angle_tolerance=10):
     spg_dict = {
         "name": str(name),
-        "reduce_formula": atoms.symbols.formula.reduce()[0].format("metal"),
+        "formula": atoms.get_chemical_formula("metal"),
     }
     cell = (atoms.cell[:], atoms.get_scaled_positions(), atoms.get_atomic_numbers())
     for symprec in symprec_list:
