@@ -43,7 +43,7 @@ def save_gen_structure(gen_pt_file):
     save_path = extract_dir.joinpath('gen')
     save_path.mkdir(exist_ok=True)
     vasplist = list(save_path.glob("*.vasp"))
-    max_stem = max([int(f.stem) for f in vasplist])
+    max_stem = max([-1] + [int(f.stem) for f in vasplist])
     for i, atoms in enumerate(a_list, max_stem + 1):
         write(save_path.joinpath(f'{i}.vasp'), atoms, direct=True)
     return a_list
