@@ -414,6 +414,10 @@ def main(args):
             gen_out_name = 'eval_gen.pt'
         else:
             gen_out_name = f'eval_gen_{args.label}.pt'
+        i = 1
+        while Path(model_path / gen_out_name).exists():
+            gen_out_name += str(i)
+            i += 1
 
         torch.save(
             {

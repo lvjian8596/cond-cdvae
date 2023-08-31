@@ -33,12 +33,18 @@ def save_gen_structure(gen_pt_file):
     extract_dir = gen_pt_file.with_name(gen_pt_file.stem)
     extract_dir.mkdir(exist_ok=True)
     # pickle ase Atoms list
+    if extract_dir.joinpath('gen.pkl').exists():
+        with open(extract_dir.joinpath('gen.pkl'), 'rb') as f:
+            privious_list = pickle.load(f)
+        a_list = privious_list + a_list
     with open(extract_dir.joinpath('gen.pkl'), 'wb') as f:
         pickle.dump(a_list, f)
     # save to gen/
     save_path = extract_dir.joinpath('gen')
     save_path.mkdir(exist_ok=True)
-    for i, atoms in enumerate(a_list):
+    vasplist = list(save_path.glob("*.vasp"))
+    max_stem = max([int(f.stem) for f in vasplist])
+    for i, atoms in enumerate(a_list, max_stem + 1):
         write(save_path.joinpath(f'{i}.vasp'), atoms, direct=True)
     return a_list
 
