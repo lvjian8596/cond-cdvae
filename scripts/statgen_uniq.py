@@ -66,9 +66,10 @@ def filter_uniq(gendir, picklefile, njobs):
         delayed(get_uniq_df)(d, matchers) for d in tqdm(gendir)
     )
     uniq_dict = {mpname: df for mpname, df in zip(mpnames, uniqdflist)}
-    uniq_dict = load_uniq_dict(picklefile).update(uniq_dict)
+    pkl_dict = load_uniq_dict(picklefile)
+    pkl_dict.update(uniq_dict)
     with open(picklefile, "wb") as f:
-        pickle.dump(uniq_dict, f)
+        pickle.dump(pkl_dict, f)
 
 
 if __name__ == '__main__':
