@@ -110,16 +110,17 @@ def get_accumdf_dict(match_dict, mpds, step=20):
     splist = list(range(0, max([len(df) for df in match_dict.values()]) + 1, step))
     splist[0] = 1
 
-    accumdf_dict = {"ntest": len(match_dict)}
-
     accumdf = getaccumdf(match_dict, splist)
-    accumdf_dict["accumdf_total"] = accumdf
+    accumdf.loc["total"] = len(match_dict)
+    accumdf_dict = {"accumdf_total": accumdf}
 
     for natomkey, mpidgroup in groupby(
         sorted(match_dict.keys(), key=lambda mpid: getnatomsgroup(mpds, mpid)),
         key=lambda mpid: getnatomsgroup(mpds, mpid),
     ):
+        mpidgroup = list(mpidgroup)
         accumdf = getaccumdf({k: match_dict[k] for k in mpidgroup}, splist)
+        accumdf.loc["total"] = len(mpidgroup)
         accumdf_dict[f"accumdf_{natomkey}"] = accumdf
 
     return accumdf_dict
