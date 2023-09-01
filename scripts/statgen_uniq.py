@@ -33,13 +33,8 @@ def load_uniq_dict(picklefile):
 
 
 def get_uniq_df(gendir, matchers):
-    gen_list = sorted(
-        [f.stem for f in gendir.joinpath("gen").glob("*.vasp")], key=lambda i: int(i)
-    )
-    genst_dict = {
-        genfn.stem: Structure.from_file(genfn)
-        for genfn in [gendir / f"gen/{i}.vasp" for i in gen_list]
-    }
+    gen_list = sorted([int(f.stem) for f in gendir.joinpath("gen").glob("*.vasp")])
+    genst_dict = {i: Structure.from_file(gendir / f"gen/{i}.vasp") for i in gen_list}
     df = pd.DataFrame(True, gen_list, list(matchers.keys()))
     for mat_name, matcher in matchers.items():
         uniqid = []
