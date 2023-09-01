@@ -29,7 +29,10 @@ def atoms2vasp(atoms):
 
 
 def get_spg_one(name, atoms, symprec_list, angle_tolerance=10):
-    spg_dict = {"name": str(name)}  # {name: str, prec: int}
+    spg_dict = {
+        "name": str(name),
+        "formula": atoms.get_chemical_formula("metal"),
+    }
     cell = (atoms.cell[:], atoms.get_scaled_positions(), atoms.get_atomic_numbers())
     for symprec in symprec_list:
         symds = spglib.get_symmetry_dataset(cell, symprec, angle_tolerance)
@@ -40,12 +43,14 @@ def get_spg_one(name, atoms, symprec_list, angle_tolerance=10):
                 scaled_positions=symds["std_positions"],
             )
             spg_dict["{:.0e}".format(symprec)] = symds['number']
+            spg_dict["{:.0e}".format(symprec) + "_symbol"] = symds['international']
             spg_dict["{:.0e}".format(symprec) + "_std_natoms"] = len(symds['std_types'])
             spg_dict["{:.0e}".format(symprec) + "_std_cif"] = atoms2cif(std_atoms)
             spg_dict["{:.0e}".format(symprec) + "_std_vasp"] = atoms2vasp(std_atoms)
         else:
             print(name, symprec, "Cannot find symmetry", file=sys.stderr)
             spg_dict["{:.0e}".format(symprec)] = 0
+            spg_dict["{:.0e}".format(symprec) + "_symbol"] = "-"
             spg_dict["{:.0e}".format(symprec) + "_std_natoms"] = 0
             spg_dict["{:.0e}".format(symprec) + "_std_cif"] = atoms2cif(atoms)
             spg_dict["{:.0e}".format(symprec) + "_std_vasp"] = atoms2vasp(atoms)
