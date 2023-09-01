@@ -1,4 +1,4 @@
-# python ~/cond-cdvae/scripts/stat_mpexpe.py eval_gen_mp-* -p match_dict.pkl
+# python ~/cond-cdvae/scripts/statgen_mpexpe.py eval_gen_mp-* -p match_dict.pkl
 # >>>      matcher_lo  matcher_md  matcher_st
 # >>> 1            40          14           6
 # >>> 20          357         186         102
@@ -54,15 +54,12 @@ def get_matchers():
 def match_genstructure(gendir, gtmp, matchers):
     mpname = gendir.name[9:]
     gen_list = sorted([int(f.stem) for f in gendir.joinpath("gen").glob("*.vasp")])
-    genst_dict = {
-        genfn.stem: Structure.from_file(genfn)
-        for genfn in [gendir / f"gen/{i}.vasp" for i in gen_list]
-    }
+    genst_dict = {i: Structure.from_file(gendir / f"gen/{i}.vasp") for i in gen_list}
     gtst = gtmp[mpname]
     df = pd.DataFrame(
         {
             mat_name: pd.Series(
-                {iname: matcher.fit(gtst, genst) for iname, genst in genst_dict.items()}
+                {i: matcher.fit(gtst, genst) for i, genst in genst_dict.items()}
             )
             for mat_name, matcher in matchers.items()
         }
@@ -152,7 +149,7 @@ def stat_mpexpe(gendir, mpds, picklefile, njobs):
 
     gtmp = get_gtmp(genmpname, mpds, njobs)  # ground truth
 
-    match_list = Parallel(njobs)(
+    match_list = Parallel(njobs, backend="multiprocessing")(
         delayed(match_genstructure)(d, gtmp, matchers) for d in tqdm(gendir)
     )
     match_dict = {
