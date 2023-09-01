@@ -134,7 +134,12 @@ def get_accumdf_dict(match_dict, mpds, step=20):
     help="Materials Project structures,"
     " default: /home/share/Data/MaterialsProject/mp-cif-230213.feather",
 )
-@click.option("-p", "--picklefile", required=True, help="out pickle file to update")
+@click.option(
+    "-p",
+    "--picklefile",
+    default="mpexpe_match_dict.pkl",
+    help="out pickle file to update, default mpexpe_match_dict.pkl",
+)
 @click.option("-j", "--njobs", default=-1, help="default: -1")
 def stat_mpexpe(gendir, mpds, picklefile, njobs):
     mpds = get_patched_mpds(mpds)
