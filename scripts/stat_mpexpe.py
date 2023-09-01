@@ -102,7 +102,7 @@ def load_match_dict(picklefile):
         with open(picklefile, "rb") as f:
             match_dict = pickle.load(f)
     else:
-        raise FileNotFoundError(picklefile)
+        match_dict = {}
     return match_dict
 
 
