@@ -9,6 +9,7 @@ from joblib import Parallel, delayed
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.core.structure import Structure
 from tqdm import tqdm
+from statgen import to_format_table
 
 
 def get_matchers():
@@ -32,9 +33,16 @@ def load_uniq_dict(picklefile):
     return uniq_dict
 
 
-def get_uniq_df(gendir, matchers):
-    gen_list = sorted([int(f.stem) for f in gendir.joinpath("gen").glob("*.vasp")])
-    genst_dict = {i: Structure.from_file(gendir / f"gen/{i}.vasp") for i in gen_list}
+def get_uniq_df(gendir, matchers, label):
+    f_uniqtable = gendir.with_name(f"uniq.{label}.table")
+    gen_list = sorted([int(f.stem) for f in gendir.glob("*.vasp")])
+
+    if f_uniqtable.exists():
+        df = pd.read_table(f_uniqtable, sep=r"\s+", index_col="index")
+        if len(df) >= len(gen_list):
+            return df
+
+    genst_dict = {i: Structure.from_file(gendir / f"{i}.vasp") for i in gen_list}
     df = pd.DataFrame(True, gen_list, list(matchers.keys()))
     for mat_name, matcher in matchers.items():
         uniqid = []
@@ -45,11 +53,16 @@ def get_uniq_df(gendir, matchers):
                     break
             else:
                 uniqid.append(fi)
+
+    table_str = to_format_table(df)
+    with open(f_uniqtable, "w") as f:
+        f.write(table_str)
+
     return df
 
 
 @click.command
-@click.argument("gendir", nargs=-1)
+@click.argument("gendirlist", nargs=-1)  # eval_gen*/gen
 @click.option(
     "-p",
     "--picklefile",
@@ -57,19 +70,20 @@ def get_uniq_df(gendir, matchers):
     help="out pickle file to update, default uniq_dict.pkl",
 )
 @click.option("-j", "--njobs", default=-1, help="default: -1")
-def filter_uniq(gendir, picklefile, njobs):
+def filter_uniq(gendirlist, picklefile, njobs):
     matchers = get_matchers()
-    gendir = [Path(d) for d in gendir if Path(d).is_dir()]
+    gendirlist = [Path(d) for d in gendirlist if Path(d).is_dir()]
+    labellist = [d.parent.name[9:] for d in gendirlist]
 
-    mpnames = [d.name[9:] for d in gendir]
     uniqdflist = Parallel(njobs, backend="multiprocessing")(
-        delayed(get_uniq_df)(d, matchers) for d in tqdm(gendir)
+        delayed(get_uniq_df)(gendir, matchers, label)
+        for gendir, label in tqdm(zip(gendirlist, labellist))
     )
-    uniq_dict = {mpname: df for mpname, df in zip(mpnames, uniqdflist)}
-    pkl_dict = load_uniq_dict(picklefile)
-    pkl_dict.update(uniq_dict)
-    with open(picklefile, "wb") as f:
-        pickle.dump(pkl_dict, f)
+    # uniq_dict = {mpname: df for mpname, df in zip(labellist, uniqdflist)}
+    # pkl_dict = load_uniq_dict(picklefile)
+    # pkl_dict.update(uniq_dict)
+    # with open(picklefile, "wb") as f:
+    #     pickle.dump(pkl_dict, f)
 
 
 if __name__ == '__main__':

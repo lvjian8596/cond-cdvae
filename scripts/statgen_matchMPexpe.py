@@ -1,4 +1,4 @@
-# python ~/cond-cdvae/scripts/statgen_mpexpe.py eval_gen_mp-* -p match_dict.pkl
+# python ~/cond-cdvae/scripts/statgen_matchMPexpe.py eval_gen_mp-* -p match_dict.pkl
 # >>>      matcher_lo  matcher_md  matcher_st
 # >>> 1            40          14           6
 # >>> 20          357         186         102
@@ -9,17 +9,20 @@
 # |  matcher_lo  matcher_md  matcher_st|
 # |i        T/F         T/F         T/F|
 
-import pickle
 import warnings
 from itertools import groupby
 from pathlib import Path
 
 import click
-import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
-from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.core.structure import Structure
+from statgen import (
+    get_matchers,
+    get_patched_mpds,
+    getnatomsgroup,
+    match_genstructure,
+)
 from tqdm import tqdm
 
 
@@ -39,45 +42,6 @@ def get_gtmp(mpname_list, mpds, njobs):
     return gtmp
 
 
-def get_matchers():
-    matcher_lo = StructureMatcher(ltol=0.3, stol=0.5, angle_tol=10)  # loose
-    matcher_md = StructureMatcher(ltol=0.2, stol=0.3, angle_tol=5)  # midium
-    matcher_st = StructureMatcher(ltol=0.1, stol=0.2, angle_tol=5)  # strict
-    matchers = {
-        "matcher_lo": matcher_lo,
-        "matcher_md": matcher_md,
-        "matcher_st": matcher_st,
-    }
-    return matchers
-
-
-def match_genstructure(gendir, gtmp, matchers):
-    mpname = gendir.name[9:]
-    gen_list = sorted([int(f.stem) for f in gendir.joinpath("gen").glob("*.vasp")])
-    genst_dict = {i: Structure.from_file(gendir / f"gen/{i}.vasp") for i in gen_list}
-    gtst = gtmp[mpname]
-    df = pd.DataFrame(
-        {
-            mat_name: pd.Series(
-                {i: matcher.fit(gtst, genst) for i, genst in genst_dict.items()}
-            )
-            for mat_name, matcher in matchers.items()
-        }
-    )
-    return df
-
-
-# [0, 20], [21, 40], [41, .]
-def getnatomsgroup(mpds, material_id):
-    natoms = mpds.loc[material_id, "nsites"]
-    if natoms <= 20:
-        return "0-20"
-    elif natoms <= 40:
-        return "21-40"
-    else:
-        return ">40"
-
-
 def getaccumdf(match_dict, splist):
     accum = []
     for sp in splist:
@@ -86,21 +50,6 @@ def getaccumdf(match_dict, splist):
             ser.append(matchdf[:sp].sum() > 0)
         accum.append(pd.Series(pd.DataFrame(ser).sum(), name=sp))
     return pd.DataFrame(accum)
-
-
-def get_patched_mpds(mpds="/home/share/Data/MaterialsProject/mp-cif-230213.feather"):
-    mpds = pd.read_feather(mpds)
-    mpds.index = mpds.material_id
-    return mpds
-
-
-def load_match_dict(picklefile):
-    if Path(picklefile).exists():
-        with open(picklefile, "rb") as f:
-            match_dict = pickle.load(f)
-    else:
-        match_dict = {}
-    return match_dict
 
 
 def get_accumdf_dict(match_dict, mpds, step=20):
@@ -124,40 +73,30 @@ def get_accumdf_dict(match_dict, mpds, step=20):
 
 
 @click.command
-@click.argument("gendir", nargs=-1)
+@click.argument("gendirlist", nargs=-1)  # eval_gen_*/gen
 @click.option(
     "--mpds",
     default="/home/share/Data/MaterialsProject/mp-cif-230213.feather",
     help="Materials Project structures,"
     " default: /home/share/Data/MaterialsProject/mp-cif-230213.feather",
 )
-@click.option(
-    "-p",
-    "--picklefile",
-    default="mpexpe_match_dict.pkl",
-    help="out pickle file to update, default mpexpe_match_dict.pkl",
-)
 @click.option("-j", "--njobs", default=-1, help="default: -1")
-def stat_mpexpe(gendir, mpds, picklefile, njobs):
+def stat_mpexpe(gendirlist, mpds, njobs):
+    click.echo("Loading MP dataset ...")
     mpds = get_patched_mpds(mpds)
-    match_dict = load_match_dict(picklefile)
     matchers = get_matchers()
 
-    gendir = [Path(d) for d in gendir if Path(d).is_dir()]
-    gendir = [d for d in gendir if d.name[9:] not in match_dict.keys()]
-    genmpname = [d.name[9:] for d in gendir]
+    gendirlist = [Path(d) for d in gendirlist if Path(d).is_dir()]
+    mpnamelist = [d.parent.name[9:] for d in gendirlist]
 
-    gtmp = get_gtmp(genmpname, mpds, njobs)  # ground truth
+    gtmp = get_gtmp(mpnamelist, mpds, njobs)  # ground truth
 
+    click.echo("Matching MP ...")
     match_list = Parallel(njobs, backend="multiprocessing")(
-        delayed(match_genstructure)(d, gtmp, matchers) for d in tqdm(gendir)
+        delayed(match_genstructure)(gendir, gtmp[mpname], matchers, mpname)
+        for mpname, gendir in tqdm(zip(mpnamelist, gendirlist))
     )
-    match_dict = {
-        **match_dict,
-        **{mpname: matchdf for mpname, matchdf in zip(genmpname, match_list)},
-    }
-    with open(picklefile, "wb") as f:
-        pickle.dump(match_dict, f)
+    return match_list
 
 
 if __name__ == "__main__":
