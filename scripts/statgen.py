@@ -93,3 +93,8 @@ def to_format_table(df: pd.DataFrame, index_label="index"):
     )
     table_str, _ = fmt_proc.communicate(csv_str)
     return table_str
+
+
+def read_format_table(ftable):
+    df = pd.read_table(ftable, sep=r"\s+", index_col="index")
+    return df

@@ -1,4 +1,4 @@
-# python ~/cond-cdvae/scripts/statgen_matchMPexpe.py eval_gen_mp-* -p match_dict.pkl
+# python ~/cond-cdvae/scripts/statgen_matchMPexpe.py eval_gen_mp-*/gen
 # >>>      matcher_lo  matcher_md  matcher_st
 # >>> 1            40          14           6
 # >>> 20          357         186         102
@@ -42,30 +42,73 @@ def get_gtmp(mpname_list, mpds, njobs):
     return gtmp
 
 
-def getaccumdf(match_dict, splist):
-    accum = []
-    for sp in splist:
-        ser = []
-        for matchdf in match_dict.values():
-            ser.append(matchdf[:sp].sum() > 0)
-        accum.append(pd.Series(pd.DataFrame(ser).sum(), name=sp))
-    return pd.DataFrame(accum)
+def concat_matchtable(matchtables: list[str|Path]):
+    """concat each match.*.table into MultiIndex DataFrame
+
+    ```
+              matcher_*   matcher_*   ...
+        index
+    mp-*    0       T/F         T/F   ...
+            1       T/F         T/F   ...
+          ...       ...         ...   ...
+    mp-*  ...       ...         ...   ...
+    ```
+    """
+    data = {
+        ftb.name[6:-6]: pd.read_table(ftb, sep=r"\s+", index_col="index")
+        for ftb in matchtables
+    }
+    matchdf = pd.concat(data.values(), keys=data.keys(), names=["material_id", "search_idx"])
+    return matchdf
 
 
-def get_accumdf_dict(match_dict, mpds, step=20):
-    splist = list(range(0, max([len(df) for df in match_dict.values()]) + 1, step))
+def getaccumdf(matchdf, step=20):
+    """_summary_
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        concatenated matchtable
+    step : int, default 20
+        step number of sampling to count
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    keys = list(matchdf.keys())  # [matcher_*]
+    matchdf = matchdf.unstack(0)  # single index of number of sampling
+    splist = list(range(0, len(matchdf) + 1, step))
     splist[0] = 1
+    return pd.DataFrame(
+        [
+            pd.Series(
+                pd.DataFrame(
+                    [
+                        pd.Series(matchdf[key][:sp].sum() > 0, name=sp)
+                        for sp in splist
+                    ]
+                ).sum(1),
+                name=key,
+            )
+            for key in keys
+        ]
+    ).T
 
-    accumdf = getaccumdf(match_dict, splist)
-    accumdf.loc["total"] = len(match_dict)
+
+def get_accumdf_dict(matchdf, mpds, step=20):
+    matchid = list(matchdf.unstack(1).index)
+    accumdf = getaccumdf(matchdf, step)
+    accumdf.loc["total"] = len(matchid)
     accumdf_dict = {"accumdf_total": accumdf}
 
     for natomkey, mpidgroup in groupby(
-        sorted(match_dict.keys(), key=lambda mpid: getnatomsgroup(mpds, mpid)),
+        sorted(matchid, key=lambda mpid: getnatomsgroup(mpds, mpid)),
         key=lambda mpid: getnatomsgroup(mpds, mpid),
     ):
         mpidgroup = list(mpidgroup)
-        accumdf = getaccumdf({k: match_dict[k] for k in mpidgroup}, splist)
+        accumdf = getaccumdf(matchdf.loc[mpidgroup], step)
         accumdf.loc["total"] = len(mpidgroup)
         accumdf_dict[f"accumdf_{natomkey}"] = accumdf
 
@@ -94,7 +137,7 @@ def stat_mpexpe(gendirlist, mpds, njobs):
     click.echo("Matching MP ...")
     match_list = Parallel(njobs, backend="multiprocessing")(
         delayed(match_genstructure)(gendir, gtmp[mpname], matchers, mpname)
-        for mpname, gendir in tqdm(zip(mpnamelist, gendirlist))
+        for mpname, gendir in tqdm(zip(mpnamelist, gendirlist), total=len(mpnamelist))
     )
     return match_list
 
