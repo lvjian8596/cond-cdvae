@@ -63,14 +63,8 @@ def get_uniq_df(gendir, matchers, label):
 
 @click.command
 @click.argument("gendirlist", nargs=-1)  # eval_gen*/gen
-@click.option(
-    "-p",
-    "--picklefile",
-    default="uniq_dict.pkl",
-    help="out pickle file to update, default uniq_dict.pkl",
-)
 @click.option("-j", "--njobs", default=-1, help="default: -1")
-def filter_uniq(gendirlist, picklefile, njobs):
+def filter_uniq(gendirlist, njobs):
     matchers = get_matchers()
     gendirlist = [Path(d) for d in gendirlist if Path(d).is_dir()]
     labellist = [d.parent.name[9:] for d in gendirlist]
