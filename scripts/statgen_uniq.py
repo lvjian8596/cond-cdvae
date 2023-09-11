@@ -18,8 +18,8 @@ def get_matchers():
     matcher_st = StructureMatcher(ltol=0.1, stol=0.2, angle_tol=5)  # strict
     matchers = {
         "matcher_lo": matcher_lo,
-        "matcher_md": matcher_md,
-        "matcher_st": matcher_st,
+        # "matcher_md": matcher_md,
+        # "matcher_st": matcher_st,
     }
     return matchers
 
