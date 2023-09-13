@@ -1,7 +1,9 @@
 import pickle
 import subprocess
+from itertools import zip_longest
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.core.structure import Structure
@@ -98,3 +100,48 @@ def to_format_table(df: pd.DataFrame, index_label="index"):
 def read_format_table(ftable):
     df = pd.read_table(ftable, sep=r"\s+", index_col="index")
     return df
+
+
+def get_stress(pattern) -> dict:
+    """get stress from OUTCAR
+
+    Parameters
+    ----------
+    pattern : str
+        string pattern like <pref>/*/<suff>/OUTCAR. Common <pref> and <suff> will be
+        ignored, different parts will be treated as keys
+
+    Returns
+    -------
+    stress_dict: dict
+        {key: stress(GPa)}
+    """
+    # pattern: <pref>/*/<suff>/OUTCAR
+    # eg. f"eval_gen_randtest-{p}G/std_5e-01.scf/*/OUTCAR"
+    stress_dict = {}
+    for foutcar in Path().glob(pattern):
+        with open(foutcar, 'r') as f:
+            outcar = f.readlines()
+            for line in outcar[::-1]:
+                if "external" in line:
+                    linesp = line.split()
+                    stress = (float(linesp[3]) + float(linesp[8])) / 10
+                    break
+            else:
+                stress = np.nan
+        stress_dict[str(foutcar)] = stress
+
+    fsplit = [list(_) for _ in list(stress_dict.keys())]
+    # >>> [[ABCxxxDEF], [ABCyyyDEF]]
+    fsplit_T = [_ for _ in zip_longest(*fsplit, fillvalue=" ") if len(set(_)) != 1]
+    # >>> [[A A], [B B], ...] -> [[x y], [x, y], ...]
+    fsplit = ["".join(_).strip() for _ in zip(*fsplit_T)]
+    # >>> [xxxDEF, yyyDEF]
+    fsplit_inv = [_[::-1] for _ in fsplit]
+    # >>> [[FEDxxx], [FEDyyy]]
+    fsplit_inv_T = [_ for _ in zip_longest(*fsplit_inv, fillvalue=" ") if len(set(_)) != 1]
+    fsplit = ["".join(_[::-1]) for _ in zip(*fsplit_inv_T)]
+
+    stress_dict = {k: v for k, v in zip(fsplit, stress_dict.values())}
+
+    return stress_dict
