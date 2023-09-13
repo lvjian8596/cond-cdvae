@@ -139,7 +139,9 @@ def get_stress(pattern) -> dict:
     # >>> [xxxDEF, yyyDEF]
     fsplit_inv = [_[::-1] for _ in fsplit]
     # >>> [[FEDxxx], [FEDyyy]]
-    fsplit_inv_T = [_ for _ in zip_longest(*fsplit_inv, fillvalue=" ") if len(set(_)) != 1]
+    fsplit_inv_T = [
+        _ for _ in zip_longest(*fsplit_inv, fillvalue=" ") if len(set(_)) != 1
+    ]
     fsplit = ["".join(_[::-1]) for _ in zip(*fsplit_inv_T)]
 
     stress_dict = {k: v for k, v in zip(fsplit, stress_dict.values())}
