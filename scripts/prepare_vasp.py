@@ -10,7 +10,7 @@ from statgen import read_format_table
 from tqdm import tqdm
 
 
-def prepare_task(structure, relax_path, PSTRESS, NSW):
+def prepare_task(structure, relax_path, PSTRESS, NSW, sym):
     user_incar_settings = {
         'NSW': NSW,
         'LREAL': False,
@@ -19,9 +19,8 @@ def prepare_task(structure, relax_path, PSTRESS, NSW):
         'EDIFFG': -0.01,
         'PSTRESS': PSTRESS,
         'NCORE': 4,
+        'ISYM': sym,
     }
-    if NSW > 1:
-        user_incar_settings["ISYM"] = 0
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -40,7 +39,7 @@ def prepare_task(structure, relax_path, PSTRESS, NSW):
     vasp.write_input(relax_path)
 
 
-def wrapped_prepare_task(indir, uniq, uniqlevel, sf, nsw, pstress):
+def wrapped_prepare_task(indir, uniq, uniqlevel, sf, nsw, pstress, sym):
     runtype = ".scf" if nsw <= 1 else ".opt"
     if uniq is not None:
         runtype = f".uniq.{uniqlevel}" + runtype
@@ -48,7 +47,7 @@ def wrapped_prepare_task(indir, uniq, uniqlevel, sf, nsw, pstress):
     relax_path.mkdir(exist_ok=True, parents=True)
 
     structure = Structure.from_file(sf)
-    prepare_task(structure, relax_path, pstress, nsw)
+    prepare_task(structure, relax_path, pstress, nsw, sym)
 
 
 @click.command
@@ -63,9 +62,10 @@ def wrapped_prepare_task(indir, uniq, uniqlevel, sf, nsw, pstress):
     type=click.Choice(["lo", "md", "st"]),
     help="unique level of matcher",
 )
+@click.option("--sym", type=int, default=0, help="ISYM, default 0")
 @click.option("-j", "--njobs", default=-1, type=int)
 def prepare_batch(
-    indir, nsw: int, pstress: float, njobs: int, uniq=None, uniqlevel="lo"
+    indir, nsw: int, pstress: float, njobs: int, uniq=None, uniqlevel="lo", sym=0
 ):
     click.echo(f"You are using {nsw=} {pstress=}")
     indir = Path(indir)
@@ -79,7 +79,7 @@ def prepare_batch(
         uniqlist = list(uniqdf[uniqdf[lv]].index)
         flist = [fi for fi in flist if int(fi.stem) in uniqlist]
     Parallel(njobs, backend="multiprocessing")(
-        delayed(wrapped_prepare_task)(indir, uniq, uniqlevel, sf, nsw, pstress)
+        delayed(wrapped_prepare_task)(indir, uniq, uniqlevel, sf, nsw, pstress, sym)
         for sf in tqdm(flist, ncols=120)
     )
 
