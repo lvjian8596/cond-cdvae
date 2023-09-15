@@ -59,7 +59,7 @@ def get_uniq_df(idx, gendir, matchers):
 )
 @click.option("-j", "--njobs", default=-1, type=int, help="default: -1")
 def filter_uniq(gendirlist, level, njobs):
-    assert njobs > 1, "njobs must be larger than 1"
+    assert njobs > 0, "njobs must be larger than 1"
     matchers = get_matchers(level)
     gendirlist = [Path(d) for d in gendirlist if Path(d).is_dir()]
 
