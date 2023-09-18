@@ -18,7 +18,7 @@ def get_matchers(level):
     matcher_st = StructureMatcher(ltol=0.1, stol=0.2, angle_tol=5)  # strict
     namelist = ["matcher_lo", "matcher_md", "matcher_st"]
     matcherlist = [matcher_lo, matcher_md, matcher_st]
-    matchers = {n: m for n, m in zip(namelist[:level], matcherlist[:level])}
+    matchers = {namelist[level - 1]: matcherlist[level - 1]}
     return matchers
 
 
@@ -46,7 +46,7 @@ def get_uniq_df(idx, gendir, matchers):
 
     df = df.sort_values("formula")
     table_str = to_format_table(df)
-    with open(gendir.with_name("uniq.table"), "w") as f:
+    with open(gendir.with_name(f"uniq.{mat_name[-2:]}.table"), "w") as f:
         f.write(table_str)
 
     return df
@@ -55,7 +55,11 @@ def get_uniq_df(idx, gendir, matchers):
 @click.command
 @click.argument("gendirlist", nargs=-1)  # eval_gen*/gen
 @click.option(
-    "-l", "--level", default=1, type=int, help="number matcher, 1-2-3: loose-mid-strict"
+    "-l",
+    "--level",
+    default=1,
+    type=int,
+    help="number matcher, 1-loose, 2-mid, 3-strict",
 )
 @click.option("-j", "--njobs", default=-1, type=int, help="default: -1")
 def filter_uniq(gendirlist, level, njobs):
