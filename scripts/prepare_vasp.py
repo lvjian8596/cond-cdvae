@@ -30,13 +30,13 @@ def prepare_task(structure, relax_path, PSTRESS, NSW, sym):
             user_potcar_settings={"W": "W_sv"},
             user_potcar_functional="PBE_54",
         )
-    vasp = VaspInput(
-        incar=mp_set.incar,
-        kpoints=mp_set.kpoints,
-        poscar=mp_set.poscar,
-        potcar=mp_set.potcar,
-    )
-    vasp.write_input(relax_path)
+        vasp = VaspInput(
+            incar=mp_set.incar,
+            kpoints=mp_set.kpoints,
+            poscar=mp_set.poscar,
+            potcar=mp_set.potcar,
+        )
+        vasp.write_input(relax_path)
 
 
 def wrapped_prepare_task(indir, uniq, uniqlevel, sf, nsw, pstress, sym):
@@ -68,6 +68,7 @@ def prepare_batch(
     indir, nsw: int, pstress: float, njobs: int, uniq=None, uniqlevel="lo", sym=0
 ):
     click.echo(f"You are using {nsw=} {pstress=}")
+    click.echo("Warning: W POTCAR is replaced by W_sv")
     indir = Path(indir)
     flist = list(indir.glob("*.vasp"))
     if uniq is not None:
