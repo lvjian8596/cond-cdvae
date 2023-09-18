@@ -12,6 +12,7 @@ import spglib
 from ase import Atoms
 from ase.io import read, write
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 
 def atoms2cif(atoms):
@@ -58,8 +59,10 @@ def get_spg_one(name, atoms, symprec_list, angle_tolerance=10):
 
 
 def get_spg(fdir, symprec_list=(0.5, 0.1, 0.01)):
+    flist = list(Path(fdir).glob("*.vasp"))
     ser_list = Parallel(-1, backend="multiprocessing")(
-        delayed(get_spg_one)(f, read(f), symprec_list) for f in Path(fdir).glob("*")
+        delayed(get_spg_one)(f, read(f), symprec_list)
+        for f in tqdm(flist, ncols=180, desc=f"{fdir}")
     )
     df = pd.DataFrame(ser_list)
     df = df.sort_values(by=list(map("{:.0e}".format, symprec_list)), ascending=False)
@@ -90,8 +93,8 @@ def write_std_vasp(df: pd.DataFrame, indir):
                 fvasp.write(ser[prec + "_std_vasp"])
 
 
-@click.command
-@click.argument("indir")
+@click.command(help="python find_spg.py eval_gen_*/gen [-s 0.5 -s 0.1 -s 0.001]")
+@click.argument("indirs", nargs=-1)
 @click.option(
     "-s",
     "--symprec",
@@ -99,12 +102,13 @@ def write_std_vasp(df: pd.DataFrame, indir):
     default=[0.5, 0.1, 0.01],
     help="symprec, can accept multiple time (not in one option)",
 )
-def cli_get_spg(indir, symprec):
-    df = get_spg(indir, symprec)
-    csv = to_format_csv(df)
-    with open(Path(indir).with_name("spg.txt"), 'w') as f:
-        f.write(csv)
-    write_std_vasp(df, indir)
+def cli_get_spg(indirs, symprec):
+    for indir in indirs:
+        df = get_spg(indir, symprec)
+        csv = to_format_csv(df)
+        with open(Path(indir).with_name("spg.txt"), 'w') as f:
+            f.write(csv)
+        write_std_vasp(df, indir)
 
 
 if __name__ == '__main__':
