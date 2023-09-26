@@ -1,4 +1,5 @@
-# find unique structures in a given dir
+# 1. find the space group if no `spg.txt` (call find_spg.py)
+# 2. grouping by the space group (with symprec=0.5) and find unique structures
 
 from collections import defaultdict
 from multiprocessing import Pool, RLock, freeze_support
@@ -11,18 +12,21 @@ from pymatgen.core.structure import Structure
 from statgen import to_format_table
 from tqdm import tqdm
 
+# from find_spg import get_spg
+# from statgen import read_format_table
 
-def get_matchers(level):
+
+def get_matchers(levels):
     matcher_lo = StructureMatcher(ltol=0.3, stol=0.5, angle_tol=10)  # loose
     matcher_md = StructureMatcher(ltol=0.2, stol=0.3, angle_tol=5)  # midium
     matcher_st = StructureMatcher(ltol=0.1, stol=0.2, angle_tol=5)  # strict
     namelist = ["matcher_lo", "matcher_md", "matcher_st"]
     matcherlist = [matcher_lo, matcher_md, matcher_st]
-    matchers = {namelist[level - 1]: matcherlist[level - 1]}
+    matchers = {namelist[level - 1]: matcherlist[level - 1] for level in levels}
     return matchers
 
 
-def get_uniq_df(idx, gendir, matchers):
+def get_uniq_df(idx, gendir: Path, matchers):
     gen_list = sorted([int(f.stem) for f in gendir.glob("*.vasp")])
 
     genst_dict = {i: Structure.from_file(gendir / f"{i}.vasp") for i in gen_list}
@@ -56,15 +60,16 @@ def get_uniq_df(idx, gendir, matchers):
 @click.argument("gendirlist", nargs=-1)  # eval_gen*/gen
 @click.option(
     "-l",
-    "--level",
-    default=1,
+    "--levels",
+    default=[1],
+    multiple=True,
     type=int,
     help="number matcher, 1-loose, 2-mid, 3-strict",
 )
 @click.option("-j", "--njobs", default=-1, type=int, help="default: -1")
-def filter_uniq(gendirlist, level, njobs):
+def filter_uniq(gendirlist, levels, njobs):
     assert njobs > 0, "njobs must be larger than 1"
-    matchers = get_matchers(level)
+    matchers = get_matchers(levels)
     gendirlist = [Path(d) for d in gendirlist if Path(d).is_dir()]
 
     freeze_support()

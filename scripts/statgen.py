@@ -98,7 +98,9 @@ def to_format_table(df: pd.DataFrame, index_label="index"):
 
 
 def read_format_table(ftable):
-    df = pd.read_table(ftable, sep=r"\s+", index_col="index")
+    df = pd.read_table(ftable, sep=r"\s+", index_col=None)
+    if "index" in df.columns:
+        df = df.set_index("index")
     return df
 
 
