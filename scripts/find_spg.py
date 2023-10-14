@@ -3,6 +3,7 @@
 import io
 import subprocess
 import sys
+import shutil
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -29,14 +30,15 @@ def atoms2vasp(atoms):
     return vasp
 
 
-def get_spg_one(name, atoms, symprec_list, angle_tolerance=10):
+def get_spg_one(name: Path, atoms, symprec_list, angle_tolerance=10):
     spg_dict = {
-        "name": str(name),
+        "name": name.name,
         "formula": atoms.get_chemical_formula("metal"),
     }
     cell = (atoms.cell[:], atoms.get_scaled_positions(), atoms.get_atomic_numbers())
     for symprec in symprec_list:
         symds = spglib.get_symmetry_dataset(cell, symprec, angle_tolerance)
+        # ---- record
         if symds is not None:
             std_atoms = Atoms(
                 symds["std_types"],
@@ -55,11 +57,17 @@ def get_spg_one(name, atoms, symprec_list, angle_tolerance=10):
             spg_dict["{:.0e}".format(symprec) + "_std_natoms"] = 0
             spg_dict["{:.0e}".format(symprec) + "_std_cif"] = atoms2cif(atoms)
             spg_dict["{:.0e}".format(symprec) + "_std_vasp"] = atoms2vasp(atoms)
+    # ---- filter P1
+    if any(spg_dict["{:.0e}".format(symprec)] > 1 for symprec in symprec_list):
+        sympart = name.parent.parent.joinpath("sympart/gen")
+        sympart.mkdir(exist_ok=True, parents=True)
+        shutil.copy(name, sympart / name.name)
     return pd.Series(spg_dict)
 
 
 def get_spg(fdir, symprec_list=(0.5, 0.1, 0.01)):
     flist = list(Path(fdir).glob("*.vasp"))
+    symprec_list = sorted(symprec_list, reverse=True)
     ser_list = Parallel(-1, backend="multiprocessing")(
         delayed(get_spg_one)(f, read(f), symprec_list)
         for f in tqdm(flist, ncols=180, desc=f"{fdir}")
@@ -103,12 +111,14 @@ def write_std_vasp(df: pd.DataFrame, indir):
     help="symprec, can accept multiple time (not in one option)",
 )
 def cli_get_spg(indirs, symprec):
+    spgdfdict = {}
     for indir in indirs:
         df = get_spg(indir, symprec)
         csv = to_format_csv(df)
         with open(Path(indir).with_name("spg.txt"), 'w') as f:
             f.write(csv)
         write_std_vasp(df, indir)
+        spgdfdict[Path(indir).parent.name] = df
 
 
 if __name__ == '__main__':

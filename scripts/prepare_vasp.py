@@ -67,7 +67,7 @@ def wrapped_prepare_task(indir, uniq, uniqlevel, sf, nsw, pstress, sym):
 def prepare_batch(
     indir, nsw: int, pstress: float, njobs: int, uniq=None, uniqlevel="lo", sym=0
 ):
-    click.echo(f"You are using {nsw=} {pstress=}")
+    click.echo(f"You are using {nsw=} {pstress=} {sym=}")
     click.echo("Warning: W POTCAR is replaced by W_sv")
     indir = Path(indir)
     flist = list(indir.glob("*.vasp"))
