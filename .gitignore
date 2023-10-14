@@ -3,7 +3,9 @@
 log/
 *.ipynb
 data/
+
 *.tiff
+*.png
 
 # .gitignore defaults for python and pycharm
 .idea
