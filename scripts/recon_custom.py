@@ -1,63 +1,78 @@
-# NOT finished
-
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import click
-import hydra
 import torch
-import numpy as np
-from hydra import compose, initialize_config_dir
+from eval_utils import load_custom_dataset, load_model
+from evaluate import reconstruction
+from torch_geometric.loader import DataLoader
 
 
-def load_model_modified(model_path, data_path):
-    from cdvae.common.utils import set_precision
-
-    with initialize_config_dir(str(model_path), version_base="1.1"):
-        cfg = compose(config_name='hparams')
-        set_precision(cfg.model.get('prec', 32))
-
-        cfg.data.datamodule.datasets.train.path = data_path
-        datamodule = hydra.utils.instantiate(
-            cfg.data.datamodule, _recursive_=False, scaler_path=model_path
-        )
-        loader = datamodule.train_dataloader()
-
-        model = hydra.utils.instantiate(
-            cfg.model,
-            optim=cfg.optim,
-            data=cfg.data,
-            logging=cfg.logging,
-            _recursive_=False,
-        )
-
-        # dummybatch = next(iter(test_loader))
-        # model.forward(dummybatch)  # initialize LazyModel
-
-        ckpts = list(model_path.glob('*.ckpt'))
-        if len(ckpts) > 0:
-            ckpt_epochs = np.array(
-                [int(ckpt.parts[-1].split('-')[0].split('=')[1]) for ckpt in ckpts]
-            )
-            ckpt = str(ckpts[ckpt_epochs.argsort()[-1]])
-        model = model.__class__.load_from_checkpoint(ckpt, **cfg.model)
-        model.lattice_scaler = torch.load(model_path / 'lattice_scaler.pt')
-        model.prop_scalers = torch.load(model_path / 'prop_scalers.pt')
-
-    # model = torch.compile(model, mode="reduce-overhead")
-    return model, loader, cfg
+def custom_reconstruction(
+    loader,
+    model,
+    ld_kwargs,
+    num_evals=1,
+    down_sample_traj_step=1,
+):
+    return reconstruction(loader, model, ld_kwargs, num_evals, down_sample_traj_step)
 
 
 @click.command
 @click.option("-m", "--model_path")
 @click.option("-d", "--data_path", help="data table path, eg. *.feather")
-def main(model_path, data_path):
-    model_path = Path(model_path).resolve()
-    print(model_path)
+@click.option("-b", "--batch_size", type=int, default=1)
+@click.option("--label", default="", help="output to eval_recon_{label}.pt")
+def main(model_path, data_path, batch_size, label=""):
+    model_path = str(Path(model_path).resolve())
     data_path = str(Path(data_path).resolve())
-    model, dataloader, _ = load_model_modified(model_path, data_path)
-    print(len(dataloader))
+    ld_kwargs = SimpleNamespace(
+        n_step_each=100,
+        step_lr=1e-4,
+        min_sigma=0,
+        save_traj=False,
+        disable_bar=False,
+    )
+    recon_out_name = f'eval_recon_{label}.pt'
+    # ========= to save ===============
+    eval_setting = vars(ld_kwargs)
+    eval_setting["model_path"] = model_path
+    eval_setting["data_path"] = data_path
+    eval_setting["label"] = label
+    # ==================================
 
-    from evaluate import reconstruction
+    model, _, cfg = load_model(model_path)
+    custom_dataset = load_custom_dataset(model_path, data_path)
+
+    loader = DataLoader(custom_dataset, batch_size)
+    start_time = time.time()
+    (
+        frac_coords,
+        num_atoms,
+        atom_types,
+        lengths,
+        angles,
+        all_frac_coords_stack,
+        all_atom_types_stack,
+        input_data_batch,
+    ) = custom_reconstruction(loader, model, ld_kwargs)
+
+    torch.save(
+        {
+            'eval_setting': eval_setting,
+            'input_data_batch': input_data_batch,
+            'frac_coords': frac_coords,
+            'num_atoms': num_atoms,
+            'atom_types': atom_types,
+            'lengths': lengths,
+            'angles': angles,
+            'all_frac_coords_stack': all_frac_coords_stack,
+            'all_atom_types_stack': all_atom_types_stack,
+            'time': time.time() - start_time,
+        },
+        Path(model_path) / recon_out_name,
+    )
 
 
 if __name__ == "__main__":
