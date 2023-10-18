@@ -416,7 +416,7 @@ def main(args):
             gen_out_name = f'eval_gen_{args.label}.pt'
         i = 1
         while Path(model_path / gen_out_name).exists():
-            gen_out_name = gen_out_name[:-1] + str(i)
+            gen_out_name = Path(gen_out_name).stem + f"pt{i}"
             i += 1
 
         torch.save(
