@@ -51,7 +51,13 @@ def extract_pt(gen_pt_file: Path):
     "File name of gen/*.vasp will auto-add."
 )
 @click.argument("gen_pt_files", nargs=-1)
-@click.option("-j", "--njobs", default=-1, type=int, help="parallel jobs")
+@click.option(
+    "-j",
+    "--njobs",
+    default=1,
+    type=int,
+    help="parallel jobs. Warning: cause error when extracting to one same dir if not 1",
+)
 def save_gen_structure(gen_pt_files, njobs):
     gen_pt_files = Parallel(njobs)(
         delayed(lambda f: Path(f).resolve())(f) for f in gen_pt_files
