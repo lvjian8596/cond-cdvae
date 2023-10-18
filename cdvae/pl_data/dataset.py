@@ -30,6 +30,8 @@ class CrystDataset(Dataset):
         graph_method: ValueNode,
         preprocess_workers: ValueNode,
         lattice_scale_method: ValueNode,
+        lattice_scaler_path = None,
+        prop_scalers_path = None,
         **kwargs,
     ):
         super().__init__()
@@ -59,8 +61,13 @@ class CrystDataset(Dataset):
             self.cached_data = pickle.load(open(pkl_path, 'rb'))
 
         add_scaled_lattice_prop(self.cached_data, lattice_scale_method)
+
         self.lattice_scaler = None
         self.prop_scalers: list = None  # list of prop_scaler
+        if lattice_scaler_path is not None:
+            self.lattice_scaler = torch.load(lattice_scaler_path)
+        if prop_scalers_path is not None:
+            self.prop_scalers = torch.load(prop_scalers_path)
 
     def __len__(self) -> int:
         return len(self.cached_data)

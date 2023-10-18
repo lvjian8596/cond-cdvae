@@ -18,7 +18,7 @@ from cdvae.common.utils import set_precision
 from cdvae.common.constants import CompScalerMeans, CompScalerStds
 from cdvae.common.data_utils import StandardScaler, chemical_symbols
 from cdvae.pl_data.datamodule import worker_init_fn
-from cdvae.pl_data.dataset import TensorCrystDataset
+from cdvae.pl_data.dataset import CrystDataset, TensorCrystDataset
 
 CompScaler = StandardScaler(
     means=np.array(CompScalerMeans),
@@ -55,6 +55,10 @@ def load_config(model_path):
 
 
 def load_model(model_path, load_data=False, testing=True):
+    model_path = Path(model_path)
+    if not model_path.is_absolute():
+        raise ValueError("model_path should be absolute")
+
     with initialize_config_dir(str(model_path), version_base="1.1"):
         cfg = compose(config_name='hparams')
         set_precision(cfg.model.get('prec', 32))
@@ -95,6 +99,26 @@ def load_model(model_path, load_data=False, testing=True):
 
     # model = torch.compile(model, mode="reduce-overhead")
     return model, test_loader, cfg
+
+
+def load_custom_dataset(model_path, data_path):
+    model_path = Path(model_path)
+    if not model_path.is_absolute():
+        raise ValueError("model_path should be absolute")
+    if not Path(data_path).is_absolute():
+        raise ValueError("data_path should be absolute")
+
+    with initialize_config_dir(str(model_path), version_base="1.1"):
+        cfg = compose(config_name='hparams')
+        datacfgdict = OmegaConf.to_container(
+            cfg["data"]["datamodule"]["datasets"]["train"],
+            resolve=True,
+        )
+        datacfgdict['path'] = data_path
+        datacfgdict['lattice_scaler_path'] = model_path.joinpath("lattice_scaler.pt")
+        datacfgdict['prop_scalers_path'] = model_path.joinpath("prop_scalers.pt")
+        dataset = CrystDataset(**datacfgdict)
+    return dataset
 
 
 def get_crystals_list(frac_coords, atom_types, lengths, angles, num_atoms):
