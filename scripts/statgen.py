@@ -5,6 +5,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from ase import Atoms
+from ase.io import read, write
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.core.structure import Structure
 
@@ -149,3 +151,9 @@ def get_stress(pattern) -> dict:
     stress_dict = {k: v for k, v in zip(fsplit, stress_dict.values())}
 
     return stress_dict
+
+
+def get_min_dist(atoms: Atoms) -> float:
+    all_dist: np.ndarray = atoms.get_all_distances(mic=True)
+    min_dist = all_dist[all_dist.nonzero()].min()
+    return min_dist
