@@ -6,9 +6,13 @@ from pathlib import Path
 
 import click
 import torch
+import numpy as np
+import pandas as pd
 from ase import Atoms
 from ase.io import write
 from tqdm import tqdm
+from pymatgen.io.ase import AseAtomsAdaptor
+from statgen import get_matchers, to_format_table
 
 
 def extract_recon_pt(recon_pt_file: Path):
@@ -61,13 +65,23 @@ def extract_recon_pt(recon_pt_file: Path):
         )
     }
 
+    matchers = get_matchers()
     with open(pkl, "wb") as f:
         pickle.dump(recon_dict, f)
+    serlist = []
+    for i, (name, recon_i) in enumerate(recon_dict.items()):
+        ser = pd.Series({"idx": i, "mp_id": name})
+        recon_st = AseAtomsAdaptor.get_structure(recon_i["recon_atoms"])
+        true_st = AseAtomsAdaptor.get_structure(recon_i["true_atoms"])
+        for matcher_name, matcher in matchers.items():
+            rms = matcher.get_rms_dist(recon_st, true_st)  # (avg, max) or None
+            ser[matcher_name] = rms[0] if rms is not None else np.inf
+        serlist.append(ser)
+        write(atoms_dir.joinpath(f"{i}.recon.vasp"), recon_i["recon_atoms"])
+        write(atoms_dir.joinpath(f"{i}.true.vasp"), recon_i["true_atoms"])
+    df = pd.DataFrame(serlist)
     with open(idx, "w") as f:
-        for i, (name, recon_i) in enumerate(recon_dict.items()):
-            f.write("{:5d}    {}\n".format(i, name))
-            write(atoms_dir.joinpath(f"{i}.recon.vasp"), recon_i["recon_atoms"])
-            write(atoms_dir.joinpath(f"{i}.true.vasp"), recon_i["true_atoms"])
+        f.write(to_format_table(df))
 
 
 @click.command
