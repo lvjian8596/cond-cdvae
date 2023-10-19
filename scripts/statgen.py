@@ -61,14 +61,27 @@ def match_genstructure(
             return df
 
     genst_dict = {i: Structure.from_file(gendir / f"{i}.vasp") for i in gen_list}
-    df = pd.DataFrame(
-        {
-            mat_name: pd.Series(
-                {i: matcher.fit(gtst, genst) for i, genst in genst_dict.items()}
-            )
-            for mat_name, matcher in matchers.items()
+
+    data = {}
+    for mat_name, matcher in matchers.items():
+        fitdict = {i: matcher.fit(gtst, genst) for i, genst in genst_dict.items()}
+        data[mat_name] = pd.Series(fitdict)
+        distdict = {
+            i: (matcher.get_rms_dist(gtst, genst_dict[i])[0] if fit else pd.NA)
+            for i, fit in fitdict.items()
         }
-    )
+        data[mat_name + "_avgd"] = pd.Series(distdict)
+
+    df = pd.DataFrame(data)
+
+    # df = pd.DataFrame(
+    #     {
+    #         mat_name: pd.Series(
+    #             {i: matcher.fit(gtst, genst) for i, genst in genst_dict.items()}
+    #         )
+    #         for mat_name, matcher in matchers.items()
+    #     }
+    # )
 
     gtst.to(str(f_target), fmt="poscar")
     table_str = to_format_table(df)
@@ -88,7 +101,9 @@ def load_dictpkl(picklefile):
 
 
 def to_format_table(df: pd.DataFrame, index_label="index"):
-    csv_str = df.to_csv(None, sep=" ", index_label=index_label)
+    csv_str = df.to_csv(
+        None, sep=" ", float_format="%.6f", na_rep="NaN", index_label=index_label
+    )
     fmt_proc = subprocess.Popen(
         ['column', '-t'],
         stdin=subprocess.PIPE,
