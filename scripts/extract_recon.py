@@ -70,12 +70,15 @@ def extract_recon_pt(recon_pt_file: Path):
         pickle.dump(recon_dict, f)
     serlist = []
     for i, (name, recon_i) in enumerate(recon_dict.items()):
-        ser = pd.Series({"idx": i, "mp_id": name})
+        ser = pd.Series({"fname": f"{i}.*.vasp", "mp_id": name})
         recon_st = AseAtomsAdaptor.get_structure(recon_i["recon_atoms"])
         true_st = AseAtomsAdaptor.get_structure(recon_i["true_atoms"])
         for matcher_name, matcher in matchers.items():
-            rms = matcher.get_rms_dist(recon_st, true_st)  # (avg, max) or None
-            ser[matcher_name] = rms[0] if rms is not None else np.inf
+            fit = matcher.fit(true_st, recon_st)
+            ser[matcher_name] = fit
+            ser[matcher_name + "avgd"] = (
+                matcher.get_rms_dist(true_st, recon_st)[0] if fit else pd.NA
+            )
         serlist.append(ser)
         write(atoms_dir.joinpath(f"{i}.recon.vasp"), recon_i["recon_atoms"])
         write(atoms_dir.joinpath(f"{i}.true.vasp"), recon_i["true_atoms"])
