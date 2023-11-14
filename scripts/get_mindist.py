@@ -16,6 +16,7 @@ def parse_one(fname):
             'name': Path(fname).name,
             'formula': atoms.get_chemical_formula('metal'),
             'min_dist': min_dist,
+            'volume_per_atom': atoms.get_volume() / len(atoms),
         }
     )
     return ser

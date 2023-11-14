@@ -106,16 +106,78 @@ def reconstruction(
     )
 
 
+periodic_table = (
+    'H', 'He',
+    'Li', 'Be', 'B',  'C',  'N', 'O',  'F',  'Ne',
+    'Na', 'Mg', 'Al', 'Si', 'P', 'S',  'Cl', 'Ar',
+    'K',  'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn', 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr',
+    'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd', 'In', 'Sn', 'Sb', 'Te', 'I',  'Xe',
+    'Cs', 'Ba',
+    'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu',
+    'Hf', 'Ta', 'W',  'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn',
+    'Fr', 'Ra',
+    'Ac','Th', 'Pa', 'U', 'Np', 'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr',
+    'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv', 'Ts', 'Og', 'Uue'
+)  # fmt: skip
+M = (
+    # 'H', 'He',
+    'Li', 'Be', 'B',  'C',  'N', 'O',  'F',  'Ne',
+    'Na', 'Mg', 'Al', 'Si', 'P', 'S',  'Cl', 'Ar',
+    'K',  'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn', 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr',
+    'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd', 'In', 'Sn', 'Sb', 'Te', 'I',  'Xe',
+    'Cs', 'Ba',
+    'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu',
+    'Hf', 'Ta', 'W',  'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', # 'Po', 'At', 'Rn',
+    # 'Fr', 'Ra',
+    # 'Ac','Th', 'Pa', 'U', 'Np', 'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr',
+    # 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv', 'Ts', 'Og', 'Uue'
+)  # fmt: skip
 pat = re.compile(r"\d+\-\d+")
 
 
-def sample_formula_range(string: str):
+def replace_hydride_formula(string):
+    """replace formula string into hydride formula string
+
+    To upper case, then replace first alphabet to "H", other to sample in M. Same
+    alphabet has the same replacing element.
+
+    AxByCz -> HxM1yM2z
+
+    Parameters
+    ----------
+    string : str
+        formula string
+
+    Returns
+    -------
+    formula string: str
+        final hydride formula string
+    """
+    string = string.upper()
+    formula = ""
+    alphamapping = {}
+    for i in string:
+        if i.isalpha():
+            if len(alphamapping) == 0:
+                alphamapping[i] = 'H'
+            if i not in alphamapping:
+                alphamapping[i] = random.choice(M)
+            formula += alphamapping[i]
+        else:
+            formula += i
+    return formula
+
+
+def sample_formula_range(string: str, *, hydride=False):
     """sample a formula from range
 
     Parameters
     ----------
     string : str
         formula string with range (e.g. H4-8O2-4, (H2O)2-4, (H2O)1-2(CaO)3-4 ...)
+    hydride : bool = False
+        relpace alphabet to H and M, for example AxByCzDt will be replaced to
+        HxM1yM2zM3t, (M1,M2,M3) may be the same, same alphabet (ignore case) with same M
 
     Returns
     -------
@@ -124,7 +186,7 @@ def sample_formula_range(string: str):
     """
     nrange = pat.findall(string)
     if len(nrange) == 0:
-        return string
+        pass
     else:
         parts = re.split(pat, string)
         string = ""
@@ -135,7 +197,9 @@ def sample_formula_range(string: str):
                 start, stop = tuple(map(int, irange.split("-")))
                 ni = str(np.random.randint(start, stop + 1))
             string += f"{part}{ni}"
-        return string
+    if hydride:
+        string = replace_hydride_formula(string)
+    return string
 
 
 def generation(
@@ -146,6 +210,7 @@ def generation(
     batch_size=512,
     down_sample_traj_step=1,
     formula=None,
+    hydride=False,
     train_data=None,
     **norm_target_props,
 ):
@@ -163,7 +228,10 @@ def generation(
         if not (formulabak is None) ^ (train_data is None):
             raise Exception("formula and train_data should only specify one")
         elif formulabak is not None:
-            formula_list = [sample_formula_range(formulabak) for _ in range(batch_size)]
+            formula_list = [
+                sample_formula_range(formulabak, hydride=hydride)
+                for _ in range(batch_size)
+            ]
             sampled_num_atoms = []
             sampled_atom_types = []
             for formula in formula_list:
@@ -399,6 +467,7 @@ def main(args):
             args.batch_size,
             args.down_sample_traj_step,
             args.formula,
+            args.hydride,
             args.train_data,
             **{
                 'energy_per_atom': args.energy_per_atom,
@@ -472,6 +541,11 @@ if __name__ == '__main__':
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
     parser.add_argument('--formula', help="formula to generate, range is acceptable")
+    parser.add_argument(
+        '--hydride',
+        action="store_true",
+        help="generate hydride, treat formula AxByCzHt as quaternary hydride, ABC do not matter",
+    )
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     parser.add_argument(
         '--placeholder',
