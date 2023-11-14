@@ -168,7 +168,7 @@ def replace_hydride_formula(string):
     return formula
 
 
-def sample_formula_range(string: str, hydride=False):
+def sample_formula_range(string: str, *, hydride=False):
     """sample a formula from range
 
     Parameters
@@ -228,7 +228,10 @@ def generation(
         if not (formulabak is None) ^ (train_data is None):
             raise Exception("formula and train_data should only specify one")
         elif formulabak is not None:
-            formula_list = [sample_formula_range(formulabak) for _ in range(batch_size)]
+            formula_list = [
+                sample_formula_range(formulabak, hydride=hydride)
+                for _ in range(batch_size)
+            ]
             sampled_num_atoms = []
             sampled_atom_types = []
             for formula in formula_list:
@@ -538,7 +541,11 @@ if __name__ == '__main__':
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
     parser.add_argument('--formula', help="formula to generate, range is acceptable")
-    parser.add_argument('--hydride', action="store_true", help="generate hydride, treat formula AxByCzHt as quaternary hydride, ABC do not matter")
+    parser.add_argument(
+        '--hydride',
+        action="store_true",
+        help="generate hydride, treat formula AxByCzHt as quaternary hydride, ABC do not matter",
+    )
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     parser.add_argument(
         '--placeholder',
