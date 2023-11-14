@@ -65,12 +65,13 @@ def match_genstructure(
     data = {}
     for mat_name, matcher in matchers.items():
         fitdict = {i: matcher.fit(gtst, genst) for i, genst in genst_dict.items()}
-        data[mat_name] = pd.Series(fitdict)
         distdict = {
-            i: (matcher.get_rms_dist(gtst, genst_dict[i])[0] if fit else pd.NA)
+            i: (matcher.get_rms_dist(gtst, genst_dict[i]) if fit else (pd.NA, pd.NA))
             for i, fit in fitdict.items()
         }
-        data[mat_name + "_avgd"] = pd.Series(distdict)
+        data[mat_name] = pd.Series(fitdict)
+        data[f"{mat_name}_normrms"] = pd.Series({k: v[0] for k, v in distdict.items()})
+        data[f"{mat_name}_maxrms"] = pd.Series({k: v[1] for k, v in distdict.items()})
 
     df = pd.DataFrame(data)
 
@@ -121,7 +122,7 @@ def read_format_table(ftable):
     return df
 
 
-def get_stress(pattern) -> dict:
+def get_stress(pattern, *, inverse=False) -> dict:
     """get stress from OUTCAR
 
     Parameters
@@ -129,6 +130,8 @@ def get_stress(pattern) -> dict:
     pattern : str
         string pattern like <pref>/*/<suff>/OUTCAR. Common <pref> and <suff> will be
         ignored, different parts will be treated as keys
+    inverse : bool, default False
+        find the last stress rather than the first one
 
     Returns
     -------
@@ -141,7 +144,9 @@ def get_stress(pattern) -> dict:
     for foutcar in Path().glob(pattern):
         with open(foutcar, 'r') as f:
             outcar = f.readlines()
-            for line in outcar[::-1]:
+            if inverse:
+                outcar = outcar[::-1]
+            for line in outcar:
                 if "external" in line:
                     linesp = line.split()
                     stress = (float(linesp[3]) + float(linesp[8])) / 10
