@@ -541,11 +541,7 @@ if __name__ == '__main__':
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
     parser.add_argument('--formula', help="formula to generate, range is acceptable")
-    parser.add_argument(
-        '--hydride',
-        action="store_true",
-        help="generate hydride, treat formula AxByCzHt as quaternary hydride, ABC do not matter",
-    )
+    parser.add_argument('--hydride', action="store_true", help="generate hydride")
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     parser.add_argument(
         '--placeholder',
