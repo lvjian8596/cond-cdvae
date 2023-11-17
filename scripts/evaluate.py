@@ -132,40 +132,46 @@ M = (
     # 'Ac','Th', 'Pa', 'U', 'Np', 'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr',
     # 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv', 'Ts', 'Og', 'Uue'
 )  # fmt: skip
-pat = re.compile(r"\d+\-\d+")
+range_pat = re.compile(r"\d+\-\d+")
+# `hydride` match HxMyMz
+hydride_base_pat = re.compile(r"\((?P<hydride>H\d+([A-Za-z]+\d+)+)\)\d+")
 
 
 def replace_hydride_formula(string):
     """replace formula string into hydride formula string
 
-    To upper case, then replace first alphabet to "H", other to sample in M. Same
-    alphabet has the same replacing element.
-
-    AxByCz -> HxM1yM2z
-
-    Parameters
-    ----------
-    string : str
-        formula string
-
-    Returns
-    -------
-    formula string: str
-        final hydride formula string
+    Replace every 'M' to one of M
     """
-    string = string.upper()
     formula = ""
-    alphamapping = {}
     for i in string:
-        if i.isalpha():
-            if len(alphamapping) == 0:
-                alphamapping[i] = 'H'
-            if i not in alphamapping:
-                alphamapping[i] = random.choice(M)
-            formula += alphamapping[i]
+        if i == 'M':
+            formula += random.choice(M)
         else:
             formula += i
     return formula
+
+
+def sample_range(string):
+    """find each range and sample from it
+    
+    Replace m-n to k, m<=k<=n
+    """
+    nrange = range_pat.findall(string)
+    if len(nrange) == 0:
+        result_string = string
+    else:
+        parts = re.split(range_pat, string)
+        result_string = ""
+        for irange, part in zip_longest(nrange, parts):
+            if irange is None:
+                ni = ""
+            else:
+                start, stop = tuple(map(int, irange.split("-")))
+                if start == stop == 0:
+                    raise ValueError("range should not be 0-0")
+                ni = str(random.randint(start, stop))
+            result_string += f"{part}{ni}"
+    return result_string
 
 
 def sample_formula_range(string: str, *, hydride=False):
@@ -176,30 +182,34 @@ def sample_formula_range(string: str, *, hydride=False):
     string : str
         formula string with range (e.g. H4-8O2-4, (H2O)2-4, (H2O)1-2(CaO)3-4 ...)
     hydride : bool = False
-        relpace alphabet to H and M, for example AxByCzDt will be replaced to
-        HxM1yM2zM3t, (M1,M2,M3) may be the same, same alphabet (ignore case) with same M
+        hydride mode, string must be like '(HxMyMzLan)m'. 'M' will be replace to M,
+        other element like La is optional. (xyznm) should be a single int or int range.
+        x represent number to muliplicity sum of yzn.
 
     Returns
     -------
     str
         formula string without range
     """
-    nrange = pat.findall(string)
-    if len(nrange) == 0:
-        pass
-    else:
-        parts = re.split(pat, string)
-        string = ""
-        for irange, part in zip_longest(nrange, parts):
-            if irange is None:
-                ni = ""
-            else:
-                start, stop = tuple(map(int, irange.split("-")))
-                ni = str(np.random.randint(start, stop + 1))
-            string += f"{part}{ni}"
+    result_string = sample_range(string)
     if hydride:
-        string = replace_hydride_formula(string)
-    return string
+        hydride_base = re.match(hydride_base_pat, result_string)  # in parenthesis part
+        if hydride_base is None:
+            raise ValueError("hydride format not match")
+        else:
+            hydride_base = hydride_base.group("formula0")
+        nlist = list(map(int, re.findall(r"\d+", hydride_base)))
+        # make sure at least one M
+        while sum(nlist[1:]) == 0:
+            result_string = sample_range(string)
+            hydride_base = re.match(hydride_base_pat, result_string).group("hydride")
+            nlist = list(map(int, re.findall(r"\d+", hydride_base)))
+        # multiple nH
+        nH = nlist[0] * sum(nlist[1:])
+        result_string = re.sub(r"\d+", f"{nH}", result_string, count=1)
+            
+        result_string = replace_hydride_formula(result_string)
+    return result_string
 
 
 def generation(
