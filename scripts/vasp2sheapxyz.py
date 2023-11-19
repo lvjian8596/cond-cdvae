@@ -3,12 +3,10 @@
 # SOPA-n*-l*-c*-g*             pbc
 #         cutoff sigma
 
-import pickle
 from itertools import chain
 from pathlib import Path
 
 import click
-import numpy as np
 from ase.io import read, write
 from ase.spacegroup import get_spacegroup
 from dscribe.descriptors import SOAP
@@ -16,89 +14,60 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 
-def save_soap_desc(fdir, scale_volperatom=None, soapkwargs={}):
-    fdir = Path(fdir)
-    assert (scale_volperatom is None) or (
-        isinstance(scale_volperatom, float)
-    ), "scalevolume should be none or float"
-    soapdesc = SOAP(**soapkwargs)
-
-    soapdict = {}
-    for fname in chain(
-        fdir.rglob("POSCAR"),
-        fdir.rglob("POSCAR_*"),
-        fdir.rglob("*.vasp"),
-        fdir.rglob("poscar_*"),
-        fdir.rglob("contcar_*"),
-    ):
-        atoms = read(fname, format="vasp")
-        if scale_volperatom is not None:
-            volume = scale_volperatom * len(atoms)
-            cell = atoms.get_cell() * (volume / atoms.get_volume()) ** (1 / 3)
-            atoms.set_cell(cell)
-        name = str(fname.relative_to(fdir))
-        soapdict[name] = soapdesc.create(atoms)
-    soap_desc = {"soapkwargs": soapkwargs, "soapdict": soapdict}
-
-    if scale_volperatom is not None:
-        desc_savename = f"soap_desc+{scale_volperatom}.pkl"
-    else:
-        desc_savename = "soap_desc.pkl"
-    with open(fdir.joinpath(desc_savename), 'wb') as f:
-        pickle.dump(soap_desc, f)
-
-    return soap_desc
-
-
-def parse_soapdict(cwd, soappkl, soapkeyname, fname, soapdesc: np.ndarray):
-    fname = soappkl.parent.joinpath(fname)
-    atoms = read(fname)
-    spg = get_spacegroup(atoms).symbol.replace(" ", "")
-    name = str(fname.relative_to(cwd)).replace("/", "#")
-    atoms.info["name"] = f"{name}"
-    atoms.info[soapkeyname] = " ".join(map(str, soapdesc))
+def read_atoms(fatoms: Path, soap: SOAP):
+    atoms = read(fatoms, format="vasp")
+    soapkey = f"SOAP-n{soap._n_max}-l{soap._l_max}-c{soap._r_cut}-g{soap._sigma}"
+    soapdesc = soap.create(atoms)
+    atoms.info["name"] = str(fatoms.resolve()).replace("/", "#")
     atoms.info["energy"] = 0.0
-    atoms.info["spacegroup"] = spg
+    atoms.info["spacegroup"] = get_spacegroup(atoms).symbol.replace(" ", "")
     atoms.info["times_found"] = 1
+    atoms.info[soapkey] = " ".join(map(str, soapdesc))
     return atoms
 
 
-def soappkl2xyz(njobs, soappkllist):
-    cwd = Path().cwd()
-    atomslist = []
-    for soappkl in soappkllist:
-        soappkl = Path(soappkl).resolve()
-        with open(soappkl, "rb") as f:
-            data = pickle.load(f)
-            soapkwargs = data["soapkwargs"]
-            soapdict = data["soapdict"]
-        soapkeyname = (
-            f"SOAP"
-            f"-n{soapkwargs.get('n_max')}-"
-            f"l{soapkwargs.get('l_max')}"
-            f"-c{soapkwargs.get('r_cut')}"
-            f"-g{soapkwargs.get('sigma', 1.0)}"
+def rglobvasp(fdir: Path):
+    return list(
+        chain(
+            fdir.rglob("POSCAR"),
+            fdir.rglob("POSCAR_*"),
+            fdir.rglob("*.vasp"),
+            fdir.rglob("poscar_*"),
+            fdir.rglob("contcar_*"),
         )
+    )
 
-        atomslist += Parallel(njobs, backend="multiprocessing")(
-            delayed(parse_soapdict)(cwd, soappkl, soapkeyname, fname, soapdesc)
-            for fname, soapdesc in tqdm(
-                soapdict.items(),
-                total=len(soapdict),
-                desc=str(soappkl.relative_to(cwd)),
-            )
+
+def vaspdir2soapxyz(njobs, vaspdirlist: list[Path], soapkwargs):
+    soap = SOAP(**soapkwargs)
+    for vaspdir in vaspdirlist:
+        vaspflist = rglobvasp(vaspdir)
+        atomslist = Parallel(njobs, "multiprocessing")(
+            delayed(read_atoms)(f, soap) for f in tqdm(vaspflist, desc=str(vaspdir))
         )
-
-    fout = "soap.xyz"
-    write(fout, atomslist, format="extxyz")
+        write(vaspdir / "soap.xyz", atomslist, format="extxyz")
 
 
 @click.command()
-@click.argument('soappkllist', nargs=-1)
+@click.argument('vaspdir', nargs=-1)
 @click.option("-j", "--njobs", type=int, default=1)
-def main(njobs, soappkllist):
-    soappkllist = [Path(soappkl) for soappkl in soappkllist]
-    soappkl2xyz(njobs, soappkllist)
+@click.option("--n_max", default=5, type=int)
+@click.option("--l_max", default=4, type=int)
+@click.option("--r_cut", default=6, type=float)
+@click.option("--sigma", default=1.0, type=float)
+@click.option("-s", "--species", help="species list, must be quoted")
+def main(njobs, vaspdir, n_max, l_max, r_cut, sigma, species):
+    vaspdirlist = [Path(d) for d in vaspdir]
+    soapkwargs = {
+        "species": species.split(),
+        "n_max": n_max,
+        "l_max": l_max,
+        "r_cut": r_cut,
+        "sigma": sigma,
+        "periodic": True,
+        "average": "inner",
+    }
+    vaspdir2soapxyz(njobs, vaspdirlist, soapkwargs)
 
 
 if __name__ == "__main__":
