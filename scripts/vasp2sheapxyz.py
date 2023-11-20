@@ -43,7 +43,8 @@ def vaspdir2soapxyz(njobs, vaspdirlist: list[Path], soapkwargs):
     for vaspdir in vaspdirlist:
         vaspflist = rglobvasp(vaspdir)
         atomslist = Parallel(njobs, "multiprocessing")(
-            delayed(read_atoms)(f, soap) for f in tqdm(vaspflist, desc=str(vaspdir))
+            delayed(read_atoms)(f, soap)
+            for f in tqdm(vaspflist, desc=str(vaspdir)[-20:])
         )
         write(vaspdir / "soap.xyz", atomslist, format="extxyz")
 
