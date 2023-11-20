@@ -153,7 +153,7 @@ def replace_hydride_formula(string):
 
 def sample_range(string):
     """find each range and sample from it
-    
+
     Replace m-n to k, m<=k<=n
     """
     nrange = range_pat.findall(string)
@@ -197,7 +197,7 @@ def sample_formula_range(string: str, *, hydride=False):
         if hydride_base is None:
             raise ValueError("hydride format not match")
         else:
-            hydride_base = hydride_base.group("formula0")
+            hydride_base = hydride_base.group("hydride")
         nlist = list(map(int, re.findall(r"\d+", hydride_base)))
         # make sure at least one M
         while sum(nlist[1:]) == 0:
@@ -207,7 +207,6 @@ def sample_formula_range(string: str, *, hydride=False):
         # multiple nH
         nH = nlist[0] * sum(nlist[1:])
         result_string = re.sub(r"\d+", f"{nH}", result_string, count=1)
-            
         result_string = replace_hydride_formula(result_string)
     return result_string
 
@@ -551,7 +550,11 @@ if __name__ == '__main__':
     parser.add_argument('--down_sample_traj_step', default=10, type=int)
     parser.add_argument('--label', default='')
     parser.add_argument('--formula', help="formula to generate, range is acceptable")
-    parser.add_argument('--hydride', action="store_true", help="generate hydride")
+    parser.add_argument(
+        '--hydride',
+        action="store_true",
+        help="generate hydride, formula be like (H3-6M0-3M0-3M0-3)1-4",
+    )
     parser.add_argument('--train_data', help="sample from trn_cached_data(pkl)")
     parser.add_argument(
         '--placeholder',
