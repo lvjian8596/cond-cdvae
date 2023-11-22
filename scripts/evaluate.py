@@ -184,7 +184,6 @@ def sample_formula_range(string: str, *, hydride=False):
     hydride : bool = False
         hydride mode, string must be like '(HxMyMzLan)m'. 'M' will be replace to M,
         other element like La is optional. (xyznm) should be a single int or int range.
-        x represent number to muliplicity sum of yzn.
 
     Returns
     -------
@@ -204,9 +203,6 @@ def sample_formula_range(string: str, *, hydride=False):
             result_string = sample_range(string)
             hydride_base = re.match(hydride_base_pat, result_string).group("hydride")
             nlist = list(map(int, re.findall(r"\d+", hydride_base)))
-        # multiple nH
-        nH = nlist[0] * sum(nlist[1:])
-        result_string = re.sub(r"\d+", f"{nH}", result_string, count=1)
         result_string = replace_hydride_formula(result_string)
     return result_string
 
