@@ -52,10 +52,10 @@ def vaspdir2soapxyz(njobs, vaspdirlist: list[Path], soapkwargs):
 @click.command()
 @click.argument('vaspdir', nargs=-1)
 @click.option("-j", "--njobs", type=int, default=1)
-@click.option("--n_max", default=5, type=int)
-@click.option("--l_max", default=4, type=int)
-@click.option("--r_cut", default=6, type=float)
-@click.option("--sigma", default=1.0, type=float)
+@click.option("--n_max", default=5, type=int, help="n_max, default 5")
+@click.option("--l_max", default=4, type=int, help="l_max, default 4")
+@click.option("--r_cut", default=6, type=float, help="r_cut, default 6")
+@click.option("--sigma", default=1.0, type=float, help="sigma, default 1.0")
 @click.option("-s", "--species", help="species list, must be quoted")
 def main(njobs, vaspdir, n_max, l_max, r_cut, sigma, species):
     vaspdirlist = [Path(d) for d in vaspdir]
