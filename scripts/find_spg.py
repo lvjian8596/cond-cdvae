@@ -58,10 +58,12 @@ def get_spg_one(name: Path, atoms, symprec_list, angle_tolerance=10):
             spg_dict["{:.0e}".format(symprec) + "_std_cif"] = atoms2cif(atoms)
             spg_dict["{:.0e}".format(symprec) + "_std_vasp"] = atoms2vasp(atoms)
     # ---- filter P1
+    # !!!! write the original structure if not P1 under any symprec !!!!
     if any(spg_dict["{:.0e}".format(symprec)] > 1 for symprec in symprec_list):
-        sympart = name.parent.parent.joinpath("sympart/gen")
+        sympart = name.parent.parent.joinpath(f"sympart/{name.parent.name}")
         sympart.mkdir(exist_ok=True, parents=True)
         shutil.copy(name, sympart / name.name)
+        write(sympart / name.with_suffix(".cif").name, atoms)
     return pd.Series(spg_dict)
 
 
@@ -99,6 +101,8 @@ def write_std_vasp(df: pd.DataFrame, indir):
         for _, ser in df.iterrows():
             with open(prec_dir / Path(ser['name']).name, "w") as fvasp:
                 fvasp.write(ser[prec + "_std_vasp"])
+            with open(prec_dir / f"{Path(ser['name']).stem}.cif", "w") as fcif:
+                fcif.write(ser[prec + "_std_cif"])
 
 
 @click.command(help="python find_spg.py eval_gen_*/gen [-s 0.5 -s 0.1 -s 0.001]")
