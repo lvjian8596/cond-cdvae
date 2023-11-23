@@ -257,6 +257,7 @@ class CDVAE(BaseModule):
             self.sigmas,
             total=self.sigmas.size(0),
             disable=ld_kwargs.disable_bar,
+            mininterval=10,
             ncols=79,
         ):
             if sigma < ld_kwargs.min_sigma:
