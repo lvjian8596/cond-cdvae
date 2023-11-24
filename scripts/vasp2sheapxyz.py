@@ -14,11 +14,14 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 
-def read_atoms(fatoms: Path, soap: SOAP):
+def read_atoms(pdir: Path, fatoms: Path, soap: SOAP):
+    pdir = pdir.resolve()
+    fatoms = fatoms.resolve()
+    name = str(fatoms.relative_to(pdir.parent)).replace('/', '#')
     atoms = read(fatoms, format="vasp")
     soapkey = f"SOAP-n{soap._n_max}-l{soap._l_max}-c{soap._r_cut}-g{soap._sigma}"
     soapdesc = soap.create(atoms)
-    atoms.info["name"] = str(fatoms.resolve()).replace("/", "#")
+    atoms.info["name"] = name
     atoms.info["energy"] = 0.0
     atoms.info["spacegroup"] = get_spacegroup(atoms).symbol.replace(" ", "")
     atoms.info["times_found"] = 1
@@ -43,7 +46,7 @@ def vaspdir2soapxyz(njobs, vaspdirlist: list[Path], soapkwargs):
     for vaspdir in vaspdirlist:
         vaspflist = rglobvasp(vaspdir)
         atomslist = Parallel(njobs, "multiprocessing")(
-            delayed(read_atoms)(f, soap)
+            delayed(read_atoms)(vaspdir, f, soap)
             for f in tqdm(vaspflist, desc=str(vaspdir)[-20:])
         )
         write(vaspdir / "soap.xyz", atomslist, format="extxyz")
@@ -56,11 +59,11 @@ def vaspdir2soapxyz(njobs, vaspdirlist: list[Path], soapkwargs):
 @click.option("--l_max", default=4, type=int, help="l_max, default 4")
 @click.option("--r_cut", default=6, type=float, help="r_cut, default 6")
 @click.option("--sigma", default=1.0, type=float, help="sigma, default 1.0")
-@click.option("-s", "--species", help="species list, must be quoted")
+@click.option("-E", "--element", multiple=True, required=True, help="element, multiple")
 def main(njobs, vaspdir, n_max, l_max, r_cut, sigma, species):
     vaspdirlist = [Path(d) for d in vaspdir]
     soapkwargs = {
-        "species": species.split(),
+        "species": species,
         "n_max": n_max,
         "l_max": l_max,
         "r_cut": r_cut,
