@@ -1,4 +1,5 @@
 import warnings
+from collections import defaultdict
 from itertools import chain
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from pymatgen.core.structure import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.vasp import Poscar
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from statgen import to_format_table
 from tqdm import tqdm
 
 
@@ -39,17 +41,32 @@ class HydrideAnalyzer:
         self.mindist = np.min(self.distmat)
         self.nH = len(self.Hindices)
         self.nbondedH = self.get_nbondedH(structure, self.distmat, max_Hbond)
-        self.ncageH = len(self.cageH)
-
-        # print(self.Mcages)
-        # print(self.cageH)
+        self.nMcageH = len(self.McageH)
 
     @property
     def series(self):
         info = {}
         info.update(self.spgdict)
-        keys_direct = ["formula_hill", "nsites", "mindist", "nH", "nbondedH", "ncageH"]
+        keys_direct = ["formula_hill", "nsites", "mindist", "nH", "nbondedH", "nMcageH"]
         info.update({key: getattr(self, key) for key in keys_direct})
+        info.update(
+            {
+                f"min_H-M{i}": np.min(self.dist_HM[k])
+                for i, k in enumerate(sorted(self.dist_HM.keys()))
+            }
+        )
+        info.update(
+            {
+                f"avg_H-M{i}": np.mean(self.dist_HM[k])
+                for i, k in enumerate(sorted(self.dist_HM.keys()))
+            }
+        )
+        info.update(
+            {
+                f"std_H-M{i}": np.std(self.dist_HM[k])
+                for i, k in enumerate(sorted(self.dist_HM.keys()))
+            }
+        )
         return pd.Series(info)
 
     @property
@@ -130,14 +147,24 @@ class HydrideAnalyzer:
         return self._Mcages
 
     @property
-    def cageH(self):
+    def McageH(self):
         "H indices surrounding M"
-        if getattr(self, "_cageH", None) is None:
+        if getattr(self, "_McageH", None) is None:
             cage_vertexes = [
                 vertex[0] for Mcage in self.Mcages.values() for vertex in Mcage
             ]
-            self._cageH = list(set(self.Hindices) & set(cage_vertexes))
-        return self._cageH
+            self._McageH = list(set(self.Hindices) & set(cage_vertexes))
+        return self._McageH
+
+    @property
+    def dist_HM(self):
+        if getattr(self, "_d_HM", None) is None:
+            self._d_HM = defaultdict(list)
+            for Mi, Mcage in self.Mcages.items():
+                Hilist = [j for j, *_ in Mcage if j in self.Hindices]
+                d_MH_list = [self.distmat[Mi, Hi] for Hi in Hilist]
+                self._d_HM[f"d_H-{self.structure[Mi].species_string}"] += d_MH_list
+        return self._d_HM
 
 
 def wrapped_analysis(fvasp, max_Hbond):
@@ -156,7 +183,11 @@ def analysis(njobs, vaspdirlist: list[Path], max_Hbond):
                 vaspflist, desc=str(vaspdir)[-20:], ncols=120, mininterval=1
             )
         )
+        namelist = [str(fvasp.relative_to(vaspdir.parent)) for fvasp in vaspflist]
         df = pd.DataFrame(series_list)
+        df.insert(0, "name", namelist)
+        with open(vaspdir.parent.joinpath(f"{vaspdir.name}.hydride.table"), "w") as f:
+            f.write(to_format_table(df))
         print(df)
 
 
@@ -165,6 +196,7 @@ def analysis(njobs, vaspdirlist: list[Path], max_Hbond):
 @click.option("-j", "--njobs", type=int, default=1)
 @click.option("--max_Hbond", type=float, default=1.0, help="max H bond (default 1.0)")
 def main(vaspdir, njobs, max_hbond):
+    vaspdir = [Path(d) for d in vaspdir]
     analysis(njobs, vaspdir, max_hbond)
 
 
