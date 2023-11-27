@@ -36,12 +36,9 @@ class HydrideAnalyzer:
         )
         self.structure = structure
         self.natoms = self.nsites = len(structure)
-        self.formula = self.get_formula(structure, "hill")
-        self.spgdict = self.get_spacegroup(structure)
-        self.graph = self.get_graph(structure)
-        self.distmat = self.get_distmat(structure)
         self.mindist = np.min(self.distmat)
-        self.nH = self.get_nH(structure)
+        self.nH = len(self.Hindices)
+
         self.nbondedH = self.get_nbondedH(structure, self.distmat, max_Hbond)
 
     @property
@@ -52,42 +49,71 @@ class HydrideAnalyzer:
         info.update({key: getattr(self, key) for key in keys_direct})
         return pd.Series(info)
 
-    def get_spacegroup(self, structure):
-        return {
-            symkey: SpacegroupAnalyzer(structure, symprec).get_space_group_number()
-            for symkey, symprec in zip(["5e-01", "1e-01", "1e-02"], [0.5, 0.1, 0.01])
-        }
+    @property
+    def spgdict(self):
+        if getattr(self, "_spgdict", None) is None:
+            self._spgdict = {
+                symkey: SpacegroupAnalyzer(structure, symprec).get_space_group_number()
+                for symkey, symprec in zip(["5e-01", "1e-01", "1e-02"], [0.5, 0.1, 0.01])
+            }
+        return self._spgdict
 
-    def get_nH(self, structure: Structure):
-        return sum([1 for n in (structure.atomic_numbers) if n == 1])
+    @property
+    def Hindices(self):
+        """indices of H"""
+        if getattr(self, "_Hindices", None) is None:
+            self._Hindices = [i for i, n in enumerate(structure.atomic_numbers) if n < 2]
+        return len(self._Hindices)
+
+    @property
+    def Mindices(self):
+        """indices of non-H"""
+        if getattr(self, "_Mindices", None) is None:
+            self._Mindices = [i for i, n in enumerate(structure.atomic_numbers) if n > 1]
+        return len(self._Mindices)
 
     def get_nbondedH(self, structure: Structure, distmat, max_Hbond=1.0):
-        Hindices = [idx for idx, n in enumerate(structure.atomic_numbers) if n == 1]
-        Hdistmat = np.take(distmat, Hindices, 0)
+        Hdistmat = np.take(distmat, self._Hindices, 0)
         return np.any(Hdistmat <= max_Hbond, axis=1).sum()
 
-    def get_distmat(self, structure):
-        distmat = structure.distance_matrix
-        np.fill_diagonal(distmat, min(structure.lattice.abc))
-        return distmat
+    @property
+    def distmat(self):
+        if getattr(self, "_distmat", None) is None:
+            self._distmat = self.structure.distance_matrix
+            np.fill_diagonal(self._distmat, min(self.structure.lattice.abc))
+        return self._distmat
 
-    def get_formula(self, structure: Structure, mode="hill"):
-        atoms = AseAtomsAdaptor.get_atoms(structure)
-        return atoms.get_chemical_formula(mode=mode)
+    @property
+    def formula_hill(self):
+        if getattr(self, "_formula_hill", None) is None:
+            atoms = AseAtomsAdaptor.get_atoms(self.structure)
+            self._formula_hill = atoms.get_chemical_formula(mode="hill")
+        return self._formula_hill
 
+    @property
     def get_graph(self, structure: Structure):
         """[[i, j, jix, jiy, jiz], ...]"""
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            g = StructureGraph.with_local_env_strategy(structure, self.CrystalNN).graph
-        edges = [
-            [i, j] + list(to_jimage) for i, j, to_jimage in g.edges(data='to_jimage')
-        ]
-        edges = np.array(edges, dtype=int)
-        # reverse edge direction and flip to_jimage
-        rev_edges = edges[:, [1, 0, 2, 3, 4]] * np.array([[1, 1, -1, -1, -1]])
-        graph = np.concatenate([edges, rev_edges])
-        return graph
+        if getattr(self, "_graph", None) is None:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                graph = StructureGraph.with_local_env_strategy(
+                        self.structure, self.CrystalNN
+                    ).graph
+            edges = np.array(
+                [
+                    [i, j] + list(to_jimage)
+                    for i, j, to_jimage in graph.edges(data='to_jimage')
+                ],
+                dtype=int,
+            )
+            # reverse edge direction and flip to_jimage
+            rev_edges = edges[:, [1, 0, 2, 3, 4]] * np.array([[1, 1, -1, -1, -1]])
+            self._graph = np.concatenate([edges, rev_edges])
+        return self._graph
+
+    @property
+    def cages(self):
+        pass
 
 
 def wrapped_analysis(fvasp, max_Hbond):
