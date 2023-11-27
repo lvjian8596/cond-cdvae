@@ -38,23 +38,28 @@ class HydrideAnalyzer:
         self.natoms = self.nsites = len(structure)
         self.mindist = np.min(self.distmat)
         self.nH = len(self.Hindices)
-
         self.nbondedH = self.get_nbondedH(structure, self.distmat, max_Hbond)
+        self.ncageH = len(self.cageH)
+
+        # print(self.Mcages)
+        # print(self.cageH)
 
     @property
     def series(self):
         info = {}
         info.update(self.spgdict)
-        keys_direct = ["formula", "nsites", "mindist", "nH", "nbondedH"]
+        keys_direct = ["formula_hill", "nsites", "mindist", "nH", "nbondedH", "ncageH"]
         info.update({key: getattr(self, key) for key in keys_direct})
         return pd.Series(info)
 
     @property
     def spgdict(self):
+        symkeys = ["5e-01", "1e-01", "1e-02"]
+        symprecs = [0.5, 0.1, 0.01]
         if getattr(self, "_spgdict", None) is None:
             self._spgdict = {
-                symkey: SpacegroupAnalyzer(structure, symprec).get_space_group_number()
-                for symkey, symprec in zip(["5e-01", "1e-01", "1e-02"], [0.5, 0.1, 0.01])
+                k: SpacegroupAnalyzer(self.structure, prec).get_space_group_number()
+                for k, prec in zip(symkeys, symprecs)
             }
         return self._spgdict
 
@@ -62,15 +67,19 @@ class HydrideAnalyzer:
     def Hindices(self):
         """indices of H"""
         if getattr(self, "_Hindices", None) is None:
-            self._Hindices = [i for i, n in enumerate(structure.atomic_numbers) if n < 2]
-        return len(self._Hindices)
+            self._Hindices = [
+                i for i, n in enumerate(self.structure.atomic_numbers) if n == 1
+            ]
+        return self._Hindices
 
     @property
     def Mindices(self):
         """indices of non-H"""
         if getattr(self, "_Mindices", None) is None:
-            self._Mindices = [i for i, n in enumerate(structure.atomic_numbers) if n > 1]
-        return len(self._Mindices)
+            self._Mindices = [
+                i for i, n in enumerate(self.structure.atomic_numbers) if n != 1
+            ]
+        return self._Mindices
 
     def get_nbondedH(self, structure: Structure, distmat, max_Hbond=1.0):
         Hdistmat = np.take(distmat, self._Hindices, 0)
@@ -91,14 +100,14 @@ class HydrideAnalyzer:
         return self._formula_hill
 
     @property
-    def get_graph(self, structure: Structure):
+    def graph(self):
         """[[i, j, jix, jiy, jiz], ...]"""
         if getattr(self, "_graph", None) is None:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 graph = StructureGraph.with_local_env_strategy(
-                        self.structure, self.CrystalNN
-                    ).graph
+                    self.structure, self.CrystalNN
+                ).graph
             edges = np.array(
                 [
                     [i, j] + list(to_jimage)
@@ -112,8 +121,23 @@ class HydrideAnalyzer:
         return self._graph
 
     @property
-    def cages(self):
-        pass
+    def Mcages(self):
+        """dict of each M's cage vertexes, {Mi: [[j, ...], ...]}"""
+        if getattr(self, "_Mcages", None) is None:
+            self._Mcages = {
+                Mi: [j for i, *j in self.graph if i == Mi] for Mi in self.Mindices
+            }
+        return self._Mcages
+
+    @property
+    def cageH(self):
+        "H indices surrounding M"
+        if getattr(self, "_cageH", None) is None:
+            cage_vertexes = [
+                vertex[0] for Mcage in self.Mcages.values() for vertex in Mcage
+            ]
+            self._cageH = list(set(self.Hindices) & set(cage_vertexes))
+        return self._cageH
 
 
 def wrapped_analysis(fvasp, max_Hbond):
@@ -128,7 +152,9 @@ def analysis(njobs, vaspdirlist: list[Path], max_Hbond):
         # structures = [Poscar.from_file(fvasp).structure for fvasp in vaspflist]
         series_list = Parallel(njobs, "multiprocessing")(
             delayed(wrapped_analysis)(fvasp, max_Hbond)
-            for fvasp in tqdm(vaspflist, desc=str(vaspdir)[-20:])
+            for fvasp in tqdm(
+                vaspflist, desc=str(vaspdir)[-20:], ncols=120, mininterval=1
+            )
         )
         df = pd.DataFrame(series_list)
         print(df)
@@ -137,11 +163,10 @@ def analysis(njobs, vaspdirlist: list[Path], max_Hbond):
 @click.command()
 @click.argument('vaspdir', nargs=-1)
 @click.option("-j", "--njobs", type=int, default=1)
-@click.option("--max_hbond", type=float, default=1.0, help="max H bond (default 1.0)")
+@click.option("--max_Hbond", type=float, default=1.0, help="max H bond (default 1.0)")
 def main(vaspdir, njobs, max_hbond):
-    analysis(njobs, vaspdir, max_Hbond)
+    analysis(njobs, vaspdir, max_hbond)
 
 
 if __name__ == "__main__":
     main()
-
