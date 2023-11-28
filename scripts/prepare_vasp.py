@@ -47,7 +47,7 @@ def wrapped_prepare_task(indir, uniq, uniqlevel, sf, vaspargs):
     runtype = ".scf" if vaspargs["nsw"] <= 1 else ".opt"
     if uniq is not None:
         runtype = f".uniq.{uniqlevel}" + runtype
-    relax_path = indir.with_suffix(runtype).joinpath(sf.stem)
+    relax_path = indir.with_name(f"{indir.name}{runtype}").joinpath(sf.stem)
     relax_path.mkdir(exist_ok=True, parents=True)
 
     structure = Structure.from_file(sf)
