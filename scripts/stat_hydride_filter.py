@@ -35,11 +35,13 @@ def filter_hydride(hydride_table, symprec, filter_nbondedHratio):
 
 
 @click.command()
-@click.argument("hydride_table")
+@click.argument("hydride_table", nargs=-1)
 @click.option("-s", "--symprec", type=float, default=0.1, help="symprec to use, default 0.1")  # fmt: skip
 @click.option("--filter-nbondedHratio", type=float, default=0.3, help="filter nbondedHratio, default 0.3")  # fmt: skip
 def main(hydride_table, symprec, filter_nbondedhratio):
-    filter_hydride(hydride_table, symprec, filter_nbondedhratio)
+    for ftable in hydride_table:
+        print("filtering ", hydride_table)
+        filter_hydride(ftable, symprec, filter_nbondedhratio)
 
 
 if __name__ == "__main__":
