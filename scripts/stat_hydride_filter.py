@@ -40,7 +40,7 @@ def filter_hydride(hydride_table, symprec, filter_nbondedHratio):
 @click.option("--filter-nbondedHratio", type=float, default=0.3, help="filter nbondedHratio, default 0.3")  # fmt: skip
 def main(hydride_table, symprec, filter_nbondedhratio):
     for ftable in hydride_table:
-        print("filtering ", hydride_table)
+        print("filtering ", ftable)
         filter_hydride(ftable, symprec, filter_nbondedhratio)
 
 
