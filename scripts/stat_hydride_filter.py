@@ -17,10 +17,11 @@ def filter_hydride(hydride_table, symprec, filter_nbondedHratio):
     df.insert(df.columns.get_loc("nbondedH") + 1, "nbondedHratio", df.nbondedH / df.nH)
     df = df.sort_values("nbondedHratio")
     # print(to_format_table(df))
-    print("nbondedHratio < 1e-5 : ", len(df[df.nbondedHratio < 1e-5]))
-    print("nbondedHratio < 1e-1 : ", len(df[df.nbondedHratio < 0.1]))
-    print("nbondedHratio < 2e-1 : ", len(df[df.nbondedHratio < 0.2]))
-    print("nbondedHratio < 3e-1 : ", len(df[df.nbondedHratio < 0.3]))
+    eps = 1e-5
+    print("nbondedHratio <= 1e-5 : ", len(df[df.nbondedHratio <= eps]))
+    print("nbondedHratio <= 1e-1 : ", len(df[df.nbondedHratio <= 0.1 + eps]))
+    print("nbondedHratio <= 2e-1 : ", len(df[df.nbondedHratio <= 0.2 + eps]))
+    print("nbondedHratio <= 3e-1 : ", len(df[df.nbondedHratio <= 0.3 + eps]))
     with open(hydride_table.with_suffix(".filter.table"), "w") as f:
         f.write(to_format_table(df))
 
@@ -29,7 +30,7 @@ def filter_hydride(hydride_table, symprec, filter_nbondedHratio):
     filter_dir = hydride_table.with_name(f"std_{sympreckey}.filter")
     shutil.rmtree(filter_dir, ignore_errors=True)
     filter_dir.mkdir()
-    for idx, ser in df[df.nbondedHratio <= filter_nbondedHratio].iterrows():
+    for idx, ser in df[df.nbondedHratio <= filter_nbondedHratio + eps].iterrows():
         shutil.copy(src_dir / Path(ser["name"]).name, filter_dir)
 
 
