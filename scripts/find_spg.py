@@ -30,9 +30,10 @@ def atoms2vasp(atoms):
     return vasp
 
 
-def get_spg_one(name: Path, atoms, symprec_list, angle_tolerance=10):
+def get_spg_one(fname: Path, symprec_list, angle_tolerance=-1):
+    atoms = read(fname)
     spg_dict = {
-        "name": name.name,
+        "name": fname.name,
         "formula": atoms.get_chemical_formula("metal"),
     }
     cell = (atoms.cell[:], atoms.get_scaled_positions(), atoms.get_atomic_numbers())
@@ -51,19 +52,12 @@ def get_spg_one(name: Path, atoms, symprec_list, angle_tolerance=10):
             spg_dict["{:.0e}".format(symprec) + "_std_cif"] = atoms2cif(std_atoms)
             spg_dict["{:.0e}".format(symprec) + "_std_vasp"] = atoms2vasp(std_atoms)
         else:
-            print(name, symprec, "Cannot find symmetry", file=sys.stderr)
+            print(fname, symprec, "Cannot find symmetry", file=sys.stderr)
             spg_dict["{:.0e}".format(symprec)] = 0
             spg_dict["{:.0e}".format(symprec) + "_symbol"] = "-"
             spg_dict["{:.0e}".format(symprec) + "_std_natoms"] = 0
             spg_dict["{:.0e}".format(symprec) + "_std_cif"] = atoms2cif(atoms)
             spg_dict["{:.0e}".format(symprec) + "_std_vasp"] = atoms2vasp(atoms)
-    # ---- filter P1
-    # !!!! write the original structure if not P1 under any symprec !!!!
-    if any(spg_dict["{:.0e}".format(symprec)] > 1 for symprec in symprec_list):
-        sympart = name.parent.parent.joinpath(f"sympart/{name.parent.name}")
-        sympart.mkdir(exist_ok=True, parents=True)
-        shutil.copy(name, sympart / name.name)
-        write(sympart / name.with_suffix(".cif").name, atoms)
     return pd.Series(spg_dict)
 
 
@@ -71,9 +65,17 @@ def get_spg(fdir, symprec_list=(0.5, 0.1, 0.01)):
     flist = list(Path(fdir).glob("*.vasp"))
     symprec_list = sorted(symprec_list, reverse=True)
     ser_list = Parallel(-1, backend="multiprocessing")(
-        delayed(get_spg_one)(f, read(f), symprec_list)
+        delayed(get_spg_one)(f, symprec_list)
         for f in tqdm(flist, ncols=180, desc=f"{fdir}")
     )
+    # ---- filter P1
+    # !!!! write the original structure if not P1 under any symprec !!!!
+    for fname, ser in zip(flist, ser_list):
+        if any(ser["{:.0e}".format(symprec)] > 1 for symprec in symprec_list):
+            sympart = fname.parent.parent.joinpath(f"sympart/{fname.parent.name}")
+            sympart.mkdir(exist_ok=True, parents=True)
+            shutil.copy(fname, sympart / fname.name)
+            write(sympart / fname.with_suffix(".cif").name, read(fname))
     df = pd.DataFrame(ser_list)
     df = df.sort_values(by=list(map("{:.0e}".format, symprec_list)), ascending=False)
     return df
