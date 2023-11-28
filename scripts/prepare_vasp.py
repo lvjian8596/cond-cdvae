@@ -43,10 +43,8 @@ def prepare_task(structure, relax_path, vaspargs):
         vasp.write_input(relax_path)
 
 
-def wrapped_prepare_task(indir, uniq, uniqlevel, sf, vaspargs):
+def wrapped_prepare_task(indir, sf, vaspargs):
     runtype = ".scf" if vaspargs["nsw"] <= 1 else ".opt"
-    if uniq is not None:
-        runtype = f".uniq.{uniqlevel}" + runtype
     relax_path = indir.with_name(f"{indir.name}{runtype}").joinpath(sf.stem)
     relax_path.mkdir(exist_ok=True, parents=True)
 
@@ -55,10 +53,7 @@ def wrapped_prepare_task(indir, uniq, uniqlevel, sf, vaspargs):
 
 
 @click.command
-@click.argument("indir")
-@click.option("-u", "--uniqfile", default=None, help="unique file, default None")
-@click.option("-l", "--uniqlevel", default="lo", type=click.Choice(["lo", "md", "st"]),
-              help="unique level of matcher, default lo")
+@click.argument("indirlist", nargs=-1)
 @click.option("-j", "--njobs", default=-1, type=int)
 @click.option("-e", "--ediff", type=float, help="EDIFF, default None")
 @click.option("-eg", "--ediffg", type=float, help="EDIFFG, default None")
@@ -67,27 +62,18 @@ def wrapped_prepare_task(indir, uniq, uniqlevel, sf, vaspargs):
 @click.option("-ks", "--kspacing", type=float,
               help="KSPACING, suggest 0.25, default None")
 @click.option("--sym", type=int, default=0, help="ISYM, suggest 0/2, default 0")
-def prepare_batch(
-    indir, uniqfile, uniqlevel,njobs, ediff, ediffg, nsw, pstress, kspacing, sym,
-):
+def prepare_batch(indirlist, njobs, ediff, ediffg, nsw, pstress, kspacing, sym):
     vaspargs = {"ediff": ediff, "ediffg": ediffg, "nsw": nsw,
                "pstress": pstress, "kspacing": kspacing, "sym": sym}
     click.echo("You are using " + " ".join(f"{k}={v}" for k, v in vaspargs.items()))
     click.echo("Warning: W POTCAR is replaced by W_sv")
-    indir = Path(indir)
-    flist = list(indir.glob("*.vasp"))
-    if uniqfile is not None:
-        lv = f"matcher_{uniqlevel}"
-        uniqdf = read_format_table(uniqfile)
-        if lv not in uniqdf.columns:
-            raise KeyError(f"key '{uniqlevel}' not in {uniqfile}")
-        click.echo(f"using unique key '{lv}' in {uniqfile}")
-        uniqlist = list(uniqdf[uniqdf[lv]].index)
-        flist = [fi for fi in flist if int(fi.stem) in uniqlist]
-    Parallel(njobs, backend="multiprocessing")(
-        delayed(wrapped_prepare_task)(indir, uniqfile, uniqlevel, sf, vaspargs)
-        for sf in tqdm(flist, ncols=120)
-    )
+    for indir in indirlist:
+        indir = Path(indir)
+        flist = list(indir.glob("*.vasp"))
+        Parallel(njobs, backend="multiprocessing")(
+            delayed(wrapped_prepare_task)(indir, sf, vaspargs)
+            for sf in tqdm(flist, ncols=120)
+        )
 
 
 if __name__ == '__main__':
